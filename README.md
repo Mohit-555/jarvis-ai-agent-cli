@@ -7,7 +7,7 @@ Jarvis is a local-first, privacy-focused, autonomous AI assistant and PC control
 ### Method 1: Using pipx (Recommended)
 `pipx` installs Jarvis into an isolated environment and makes the command globally available:
 ```bash
-pipx install jarvis-agent-cli
+pipx install jarvis-ai-agent-cli
 ```
 or directly from source:
 ```bash
