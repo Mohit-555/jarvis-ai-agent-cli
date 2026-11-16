@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "name": "filesystem",
+      "transport": "stdio",
+      "command": "npx @modelcontextprotocol/server-filesystem /home/user",
+      "enabled": false
+    },
+    {
+      "name": "github",
+      "transport": "sse",
+      "url": "http://localhost:3001/sse",
+      "enabled": false
+    }
+  ]
+}

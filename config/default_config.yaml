@@ -1,0 +1,44 @@
+# Jarvis Default Configuration
+assistant_name: Jarvis
+wake_word: jarvis
+hardware_adaptive: true
+device: cpu
+
+# LLM
+llm_provider: ollama
+ollama_base_url: http://localhost:11434
+ollama_model: llama3.2:3b
+
+# Voice
+stt_model: tiny
+tts_engine: pyttsx3
+voice_input: false
+voice_output: false
+
+# Features
+enable_vision: false
+enable_browser: false
+enable_code_exec: true
+enable_web_search: true
+enable_system_control: true
+enable_memory: true
+enable_mcp: false
+enable_scheduler: false
+enable_api: false
+
+# Memory
+memory_backend: chroma
+rag_chunk_size: 512
+
+# Agent
+agent_max_iterations: 5
+max_concurrent_tools: 1
+
+# API
+api_host: 127.0.0.1
+api_port: 7777
+web_ui_port: 7778
+enable_auth: false
+
+# Logging
+log_level: INFO

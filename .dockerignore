@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.db
+.jarvis/
+config/*.local.*
+.env
+venv/
+*.log
+Dockerfile
+docker-compose.yml
+.git
+.gitignore
+.dockerignore

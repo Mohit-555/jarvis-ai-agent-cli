@@ -1,0 +1,77 @@
+directories:
+  allowed_read:
+  - /home
+  - /tmp
+  allowed_write:
+  - /tmp/opencode
+  - /home/*/Desktop
+  - /home/*/Documents
+  blocked:
+  - /etc
+  - /usr
+  - /boot
+tools:
+  calendar_create_event:
+    description: Create calendar events
+    level: confirm
+  calendar_list_calendars:
+    description: List calendars
+    level: auto
+  calendar_list_events:
+    description: List calendar events
+    level: auto
+  clipboard_read:
+    description: Read from clipboard
+    level: auto
+  clipboard_write:
+    description: Write to clipboard
+    level: auto
+  email_read:
+    description: Read full email content
+    level: auto
+  email_read_inbox:
+    description: Read inbox emails
+    level: auto
+  email_read_matching:
+    description: Read latest matching email
+    level: auto
+  email_search:
+    description: Search emails
+    level: auto
+  email_status:
+    description: Check email connection status
+    level: auto
+  evil_tool: deny
+  list_directory:
+    description: List directory contents
+    level: auto
+  process_kill:
+    description: Kill processes
+    level: confirm
+  read_file:
+    description: Read files from allowed directories
+    level: auto
+  run_app:
+    description: Launch applications
+    level: confirm
+  run_python:
+    description: Execute Python code
+    level: confirm
+  screenshot:
+    description: Take screenshots
+    level: auto
+  shell_exec:
+    description: Execute shell commands
+    level: confirm
+  system_info:
+    description: Get system information
+    level: auto
+  web_fetch:
+    description: Fetch web page content
+    level: auto
+  web_search:
+    description: Search the web
+    level: auto
+  write_file:
+    description: Write/modify files
+    level: confirm
