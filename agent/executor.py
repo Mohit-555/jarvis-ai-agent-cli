@@ -170,13 +170,7 @@ class AgentExecutor:
         session_id = session.session_id if session else None
         context = self._get_context(session)
 
-        _casual = re.match(
-            r"^(hi|hello|hey|hii|hlo|hy|yo|sup|bye|good\s*(morning|afternoon|evening|night)|"
-            r"(kya|kaise|kyu)\s*(ho|hai|hu|kar)\b|"
-            r"namaste|shukriya|dhanyavad|thank|thanks|thx|ok|okay|👍|🙏|😊|👋)\s*$",
-            task.strip().lower(),
-        )
-        if _casual or len(task.strip()) < 3:
+        if self._is_direct_chat(task):
             async for chunk in self._direct_llm_stream(task, session):
                 yield chunk
             return
@@ -473,22 +467,70 @@ class AgentExecutor:
                     prompt += "- You MUST communicate in clear, natural English.\n"
         return prompt
 
+    def _is_direct_chat(self, task: str) -> bool:
+        """Determine if a user query is conversational or informational, bypassing multi-step planner."""
+        t = task.strip().lower()
+        t_clean = re.sub(r"[?!.,;:~_]+", "", t).strip()
+
+        # 1. Greetings & common chit-chat
+        casual_exact = {
+            "hi", "hello", "hey", "hii", "hiii", "hlo", "hy", "yo", "sup", "bye", "goodbye",
+            "good morning", "good afternoon", "good evening", "good night",
+            "namaste", "namaskar", "shukriya", "dhanyavad", "thank you", "thanks", "thx",
+            "ok", "okay", "alright", "got it", "cool", "nice", "great", "sure",
+            "kya haal hai", "kaise ho", "kya chal raha hai", "sab theek", "aur batao",
+            "who are you", "what are you", "what can you do", "introduce yourself", "tell me about yourself",
+            "what's your name", "whats your name", "tum kaun ho", "aap kaun ho"
+        }
+        if t_clean in casual_exact or len(t_clean) < 3:
+            return True
+
+        # 2. Greeting with name or common follow-up (e.g. "hi jarvis", "hello buddy, how are you?", "hey jarvis what's up")
+        if re.match(r"^(hi|hello|hey|hii|namaste|hlo)\b[\s\w,!-]*\b(jarvis|bro|buddy|friend|bhai)?[\s,!-]*([?]|how are you|kya haal|who are you|kaise ho|what's up|whats up|help me)?\s*$", t):
+            return True
+
+        # 3. Action keywords that strictly require the tool planner
+        action_keywords = [
+            "open ", "launch ", "start app", "close app",
+            "run ", "exec ", "execute ", "terminal", "bash", "shell",
+            "create file", "write file", "make a file", "save to", "save this to",
+            "delete file", "remove file", "read file", "list directory", "list files", "ls -",
+            "search web", "google ", "web search", "browse ", "fetch url", "download ",
+            "screenshot", "kill process", "check cpu", "system status", "set volume"
+        ]
+        if any(k in t for k in action_keywords):
+            return False
+
+        # 4. Pure informational or question queries without filesystem/command instructions
+        info_starters = [
+            "what is", "what are", "who is", "who was", "where is", "why is", "why does",
+            "tell me a", "tell me about", "explain", "how does", "summarize",
+            "write a poem", "write a story", "write an essay", "translate",
+            "kya hai", "kaise hota hai", "samjhao", "batao", "joke sunao"
+        ]
+        if any(t.startswith(s) for s in info_starters):
+            if not any(k in t for k in ["save", "file", "folder", "open", "run", "terminal", "command", "download"]):
+                return True
+
+        return False
+
     def _build_messages(self, task: str, session: Session = None) -> list[dict]:
         """Build full message history: system prompt + conversation history + current user message."""
         messages = [{"role": "system", "content": self._get_system_prompt()}]
 
         if session:
-            # Include up to the last 20 turns (excluding the current user message which we add separately)
-            history = session.get_context(limit=20)
+            # Include up to the last 10 turns (compact payload for faster LLM response)
+            history = session.get_context(limit=10)
             # The current user message was already added to session by cli.py before calling execute_stream,
             # so skip the last message (it's the current user turn) to avoid duplication.
             past = history[:-1] if history and history[-1].get('role') == 'user' and history[-1].get('content') == task else history
             for msg in past:
                 role = msg.get('role', 'user')
                 content = msg.get('content', '')
-                # Only include user and assistant roles (skip system/tool messages)
                 if role in ('user', 'assistant') and content:
-                    messages.append({"role": role, "content": content})
+                    # Truncate giant past messages (e.g. huge code/log dumps) to keep prompt fast
+                    trimmed = content[:600] + " ...[truncated]" if len(content) > 600 else content
+                    messages.append({"role": role, "content": trimmed})
 
         messages.append({"role": "user", "content": task})
         return messages

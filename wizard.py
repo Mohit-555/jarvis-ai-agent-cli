@@ -109,7 +109,7 @@ def setup():
         key = input("  Gemini API Key: ").strip()
         if key:
             cfg["gemini_api_key"] = key
-        cfg["openrouter_model"] = input(f"  Model [{cfg['gemini_model']}]: ") or cfg["gemini_model"]
+        cfg["gemini_model"] = input(f"  Model [{cfg['gemini_model']}]: ") or cfg["gemini_model"]
     elif choice == "2":
         cfg["llm_provider"] = "openai"
         key = input("  OpenAI API Key: ").strip()

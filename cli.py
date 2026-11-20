@@ -629,7 +629,7 @@ class JarvisCLI:
         MODEL_PRESETS = {
             "openai":     ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
             "anthropic":  ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
-            "gemini":     ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+            "gemini":     ["gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.6-flash"],
             "openrouter": ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-2.0-flash", "meta-llama/llama-3.2-3b-instruct"],
             "opencode":   ["deepseek-v4-flash-free", "gpt-5.4", "gpt-5.4-mini"],
         }
