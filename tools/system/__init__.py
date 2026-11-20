@@ -1,6 +1,9 @@
 import subprocess
 import shutil
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 try:
     import pyautogui
@@ -22,6 +25,8 @@ class SystemTool:
             return f"Error: {e}"
 
     def get_system_info(self):
+        if not psutil:
+            return {"cpu_percent": 0.0, "memory": {}, "disk": {}, "processes": 0}
         info = {
             "cpu_percent": psutil.cpu_percent(interval=0.5),
             "memory": psutil.virtual_memory()._asdict(),

@@ -1,4 +1,3 @@
-from openai import AsyncOpenAI
 from httpx import Timeout as HTTPXTimeout
 from typing import AsyncGenerator
 
@@ -12,6 +11,10 @@ class OpenAIProvider(BaseLLMProvider):
 
     def __init__(self, config: dict):
         super().__init__(config)
+        try:
+            from openai import AsyncOpenAI
+        except ImportError:
+            raise ImportError("The 'openai' package is required for OpenAI provider. Run: pip install openai")
         self.client = AsyncOpenAI(
             api_key=config.get('openai_api_key') or None,
             timeout=HTTPXTimeout(REQUEST_TIMEOUT),

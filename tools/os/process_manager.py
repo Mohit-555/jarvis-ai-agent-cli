@@ -1,11 +1,16 @@
 import os
 import signal
 import subprocess
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 
 class ProcessManagerTool:
     def list(self):
+        if not psutil:
+            return []
         processes = []
         for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "status"]):
             try:
@@ -19,7 +24,7 @@ class ProcessManagerTool:
             if isinstance(target, int) or target.isdigit():
                 os.kill(int(target), signal.SIGTERM)
                 return f"Killed PID {target}"
-            else:
+            elif psutil:
                 for proc in psutil.process_iter(["pid", "name"]):
                     try:
                         if target.lower() in (proc.info["name"] or "").lower():
@@ -28,6 +33,8 @@ class ProcessManagerTool:
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         pass
                 return f"No process found: {target}"
+            else:
+                return f"Process manager requires psutil for process name search: {target}"
         except Exception as e:
             return f"Error: {e}"
 

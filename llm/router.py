@@ -2,21 +2,6 @@ from typing import AsyncGenerator
 
 from core.exceptions import ProviderNotFound
 from llm.providers.base import BaseLLMProvider
-from llm.providers.ollama import OllamaProvider
-from llm.providers.openai import OpenAIProvider
-from llm.providers.anthropic import AnthropicProvider
-from llm.providers.gemini import GeminiProvider
-from llm.providers.openrouter import OpenRouterProvider
-from llm.providers.opencode import OpenCodeProvider
-
-PROVIDER_MAP = {
-    'ollama': OllamaProvider,
-    'openai': OpenAIProvider,
-    'anthropic': AnthropicProvider,
-    'gemini': GeminiProvider,
-    'openrouter': OpenRouterProvider,
-    'opencode': OpenCodeProvider,
-}
 
 
 class LLMRouter:
@@ -24,12 +9,32 @@ class LLMRouter:
         self.config = config
         self._providers: dict[str, BaseLLMProvider] = {}
 
+    def _get_provider_class(self, name: str):
+        if name == 'ollama':
+            from llm.providers.ollama import OllamaProvider
+            return OllamaProvider
+        elif name == 'openai':
+            from llm.providers.openai import OpenAIProvider
+            return OpenAIProvider
+        elif name == 'anthropic':
+            from llm.providers.anthropic import AnthropicProvider
+            return AnthropicProvider
+        elif name == 'gemini':
+            from llm.providers.gemini import GeminiProvider
+            return GeminiProvider
+        elif name == 'openrouter':
+            from llm.providers.openrouter import OpenRouterProvider
+            return OpenRouterProvider
+        elif name == 'opencode':
+            from llm.providers.opencode import OpenCodeProvider
+            return OpenCodeProvider
+        else:
+            raise ProviderNotFound(f"Unknown provider: {name}")
+
     def _get_provider(self, name: str = None) -> BaseLLMProvider:
         name = name or self.config.get('llm_provider', 'ollama')
         if name not in self._providers:
-            if name not in PROVIDER_MAP:
-                raise ProviderNotFound(f"Unknown provider: {name}")
-            provider_cls = PROVIDER_MAP[name]
+            provider_cls = self._get_provider_class(name)
             self._providers[name] = provider_cls(self.config)
         return self._providers[name]
 

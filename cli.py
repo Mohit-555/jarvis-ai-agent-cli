@@ -181,7 +181,7 @@ class JarvisCLI:
     def print_banner(self):
         from banner import print_banner as _banner
         _banner(
-            version="2.1",
+            version="2.1.1",
             provider=self.config.get("llm_provider", "ollama"),
             model=self._active_model(),
             device=self.config.get("device", "cpu"),

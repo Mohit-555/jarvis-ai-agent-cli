@@ -1,4 +1,3 @@
-from openai import AsyncOpenAI
 from httpx import Timeout as HTTPXTimeout
 from typing import AsyncGenerator
 
@@ -12,6 +11,10 @@ class OpenCodeProvider(BaseLLMProvider):
 
     def __init__(self, config: dict):
         super().__init__(config)
+        try:
+            from openai import AsyncOpenAI
+        except ImportError:
+            raise ImportError("The 'openai' package is required for OpenCode provider. Run: pip install openai")
         self.client = AsyncOpenAI(
             base_url="https://opencode.ai/zen/v1",
             api_key=config.get('opencode_api_key') or '',

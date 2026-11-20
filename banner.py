@@ -161,7 +161,7 @@ def print_mini_banner(provider: str = "", model: str = ""):
 # ── Standalone test ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print_banner(
-        version="2.0",
+        version="2.1.1",
         provider="ollama",
         model="llama3.2:3b",
         device="cpu",

@@ -16,7 +16,10 @@ class GeminiProvider(BaseLLMProvider):
     @property
     def client(self):
         if self._client is None:
-            import google.generativeai as genai
+            try:
+                import google.generativeai as genai
+            except ImportError:
+                raise ImportError("The 'google-generativeai' package is required for Gemini provider. Run: pip install google-generativeai")
             genai.configure(api_key=self.api_key)
             self._client = genai
         return self._client

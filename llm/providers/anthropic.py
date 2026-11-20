@@ -15,7 +15,10 @@ class AnthropicProvider(BaseLLMProvider):
     @property
     def client(self):
         if self._client is None:
-            import anthropic
+            try:
+                import anthropic
+            except ImportError:
+                raise ImportError("The 'anthropic' package is required for Claude/Anthropic provider. Run: pip install anthropic")
             self._client = anthropic.AsyncAnthropic(api_key=self.api_key)
         return self._client
 

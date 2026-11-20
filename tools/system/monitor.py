@@ -1,8 +1,13 @@
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 
 class SystemMonitor:
     def cpu(self):
+        if not psutil:
+            return {"percent": 0.0, "count": 1, "freq": {}}
         return {
             "percent": psutil.cpu_percent(interval=0.5),
             "count": psutil.cpu_count(),
@@ -10,12 +15,18 @@ class SystemMonitor:
         }
 
     def memory(self):
+        if not psutil:
+            return {"total": 0, "available": 0, "percent": 0}
         return psutil.virtual_memory()._asdict()
 
     def disk(self):
+        if not psutil:
+            return {"total": 0, "used": 0, "free": 0, "percent": 0}
         return psutil.disk_usage("/")._asdict()
 
     def network(self):
+        if not psutil:
+            return {}
         return psutil.net_io_counters()._asdict()
 
     def gpu(self):
