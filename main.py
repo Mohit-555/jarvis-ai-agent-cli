@@ -16,7 +16,7 @@ def print_banner_cmd():
     provider = cfg.get('llm_provider', 'ollama')
     model = cfg.get(f'{provider}_model', '')
     device = cfg.get('device', 'cpu')
-    print_banner(version='2.0', provider=provider, model=model, device=device)
+    print_banner(version='2.1', provider=provider, model=model, device=device)
 
 
 def cmd_detect(args=None):

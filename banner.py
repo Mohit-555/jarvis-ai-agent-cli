@@ -57,7 +57,7 @@ def _sep(style: str = "bright_black") -> Text:
 # ── Banner ────────────────────────────────────────────────────────────────────
 
 def print_banner(
-    version: str = "2.0",
+    version: str = "2.1",
     provider: str = "ollama",
     model: str = "",
     device: str = "cpu",
