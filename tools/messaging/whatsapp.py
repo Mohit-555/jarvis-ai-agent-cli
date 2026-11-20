@@ -376,20 +376,23 @@ class WhatsAppTool:
                 browser = p.chromium.connect_over_cdp(cdp_url)
                 context = browser.contexts[0]
 
-                if is_num:
+                page = None
+                for existing in context.pages:
+                    if "web.whatsapp.com" in existing.url:
+                        page = existing
+                        break
+                if page is None:
                     page = context.new_page()
+
+                page.bring_to_front()
+
+                if is_num:
                     url = f"https://web.whatsapp.com/send?phone={number}&text={urllib.parse.quote(message)}"
-                    page.goto(url, timeout=45000)
+                    if page.url != url:
+                        page.goto(url, timeout=45000)
                 else:
-                    page = None
-                    for existing in context.pages:
-                        if "web.whatsapp.com" in existing.url:
-                            page = existing
-                            break
-                    if page is None:
-                        page = context.new_page()
+                    if "web.whatsapp.com" not in page.url:
                         page.goto("https://web.whatsapp.com", timeout=45000)
-                    page.bring_to_front()
 
                 load_err = _wait_for_wa_loaded(page, timeout=90000)
                 if load_err:
@@ -406,9 +409,16 @@ class WhatsAppTool:
                             "(selectors tried: " + str(MESSAGE_INPUT_SELECTORS) + ").")
 
                 try:
-                    msg_box.click()
-                    msg_box.type(message, delay=10)
-                    page.wait_for_timeout(300)
+                    current_text = ""
+                    try:
+                        current_text = (msg_box.inner_text() or "").strip()
+                    except Exception:
+                        pass
+
+                    if not current_text:
+                        msg_box.click()
+                        msg_box.type(message, delay=10)
+                        page.wait_for_timeout(300)
                 except Exception as e:
                     return f"Found the message box but could not type into it: {e}"
 
