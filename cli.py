@@ -5,7 +5,7 @@ import shutil
 import time
 from typing import AsyncGenerator, Optional
 
-from rich.console import Console
+from rich.console import Console, Group as RGroup
 from rich.markdown import Markdown
 from rich.live import Live
 from rich.table import Table
@@ -14,6 +14,7 @@ from rich.panel import Panel
 from rich import box
 from rich.columns import Columns
 from rich.syntax import Syntax
+from rich.prompt import Prompt
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.formatted_text import HTML
@@ -239,7 +240,6 @@ class JarvisCLI:
         elif verb == "/profile":
             name = self.config.get("user_name", "Not set")
             lang = self.config.get("user_language", "Not set")
-            from rich.panel import Panel
             console.print(Panel(
                 f"[bold cyan]User Profile[/bold cyan]\n"
                 f"  Name:     [yellow]{name}[/yellow]\n"
@@ -484,7 +484,6 @@ class JarvisCLI:
         shortcuts.add_row("Ctrl+L", "Clear screen")
         shortcuts.add_row("↑ / ↓", "Navigate history")
 
-        from rich.console import Group as RGroup
         console.print(Panel(
             RGroup(Text("Commands", style="bold cyan"), t, Text("Shortcuts", style="bold cyan"), shortcuts),
             title="[bold cyan]Help[/bold cyan]",
@@ -751,9 +750,6 @@ class JarvisCLI:
         if not sys.stdin.isatty():
             return
 
-        from rich.panel import Panel
-        from rich.prompt import Prompt
-
         console.print()
         console.print(Panel(
             "[bold cyan]Welcome to Jarvis![/bold cyan]\n"
@@ -858,8 +854,6 @@ class JarvisCLI:
                             except Exception:
                                 pass
                         if live is None:
-                            from rich.live import Live
-                            from rich.markdown import Markdown
                             live = Live(console=console, refresh_per_second=12)
                             live.start()
                         full += chunk

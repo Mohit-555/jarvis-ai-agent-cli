@@ -21,7 +21,8 @@ from core.event_bus import event_bus, EVENTS
 from core.config import load_config, CONFIG_DIR, LOGS_DIR
 from core.session import session_manager
 
-logger = None
+import logging
+logger = logging.getLogger('jarvis.daemon')
 
 
 class Daemon:
