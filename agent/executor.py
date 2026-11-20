@@ -1,6 +1,8 @@
+import os
 import asyncio
 import re
 import time
+from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 from core.event_bus import event_bus, EVENTS
@@ -461,6 +463,15 @@ class AgentExecutor:
 
     def _get_system_prompt(self) -> str:
         prompt = SYSTEM_PROMPT
+        cwd = os.getcwd()
+        home = os.path.expanduser("~")
+        jarvis_home = os.path.expanduser("~/.jarvis")
+        prompt += f"\n\n# System Environment & Paths\n"
+        prompt += f"- Current Working Directory: {cwd}\n"
+        prompt += f"- User Home Directory: {home}\n"
+        prompt += f"- Jarvis User Data Directory: {jarvis_home}\n"
+        prompt += f"- Note: When the user asks about the Jarvis folder, project, or files, it refers to the Current Working Directory ({cwd}) or Jarvis User Data Directory ({jarvis_home}).\n"
+
         user_name = self.config.get("user_name") if self.config else None
         user_lang = self.config.get("user_language") if self.config else None
         if user_name or user_lang:
@@ -555,11 +566,18 @@ class AgentExecutor:
         return messages
 
     def _get_context(self, session: Session = None) -> str:
-        if not session:
-            return ""
-        return "\n".join(
-            f"{m['role']}: {m['content']}" for m in session.get_context(limit=5)
-        )
+        ctx_parts = [
+            f"Current Working Directory: {os.getcwd()}",
+            f"User Home Directory: {os.path.expanduser('~')}",
+            f"Jarvis Data Directory: {os.path.expanduser('~/.jarvis')}",
+        ]
+        if session:
+            chat_hist = "\n".join(
+                f"{m['role']}: {m['content']}" for m in session.get_context(limit=5)
+            )
+            if chat_hist:
+                ctx_parts.append(f"Recent Chat History:\n{chat_hist}")
+        return "\n".join(ctx_parts)
 
     def _format_results(self, results) -> str:
         parts = []

@@ -89,6 +89,7 @@ class Planner:
             "- 'check/how many unread messages on whatsapp' (count/who only) → whatsapp_check_unread\n"
             "- 'read my unread messages/show me unread whatsapp messages' (wants actual text from multiple unread chats) → whatsapp_read_unread\n"
             "- 'batao X kiska number hai / who is number X / search contact X on whatsapp' → whatsapp_search_contact with query='X'\n"
+            "- 'kya jarvis ka folder dekh sakte ho / show jarvis folder / list project files / list directory' → list_directory with path='.'\n"
             "- 'what did X say/last message from X/read messages from X/dikhao X ne kya bheja/dekho X se baat' (wants messages from a specific contact) → whatsapp_read_chat with contact='X'\n"
             "- 'search X in browser' → search_in_browser\n"
             "- 'open whatsapp.com/youtube.com/etc' → browse_url with the website URL\n"
