@@ -42,6 +42,9 @@ Tool results appear as follow-up messages. Use them to decide your next action.
 - whatsapp_search_contact: Search a contact or phone number on WhatsApp Web to find out whose number it is.
 - email_read_inbox / email_search / email_read: Read and search your personal email inbox.
 - calendar_list_events / calendar_create_event: Manage and list Google Calendar events.
+- git_status / git_diff / git_log / git_commit / git_push / git_pull / git_branch / git_checkout / git_stash / git_clone / git_run: Perform local Git operations (status, diff, log, commit, push, pull, branch, stash, clone, arbitrary git commands).
+- github_create_pr / github_list_prs / github_view_pr / github_merge_pr: Manage GitHub Pull Requests via GitHub CLI (`gh`).
+- github_create_issue / github_list_issues / github_view_issue / github_close_issue / github_repo_view / github_run: Manage GitHub issues and repository details.
 - write_file: Write content to a file. The "content" field must be the FULL actual content.
 - read_file: Read a file. Use this before editing existing files.
 - open_app: Open a desktop application (calculator, clock, brave browser, terminal, etc.).
@@ -50,7 +53,7 @@ Tool results appear as follow-up messages. Use them to decide your next action.
 - web_fetch: Fetch the content of a URL.
 - ask_user: Ask the user a question when you need clarification.
 
-You HAVE integrated capabilities to interact with WhatsApp Web, personal emails, local files, shell commands, and the browser using your tools. If the user asks whether you can access or see WhatsApp, answer YES and explain what WhatsApp actions you can perform. Never claim you lack access to WhatsApp.
+You HAVE integrated capabilities to interact with WhatsApp Web, personal emails, Google Calendar, local files, Git repositories, GitHub (via gh CLI), shell commands, and the browser using your tools. If the user asks whether you can access WhatsApp or perform Git/GitHub operations, answer YES and explain what actions you can perform. Never claim you lack access.
 
 # Tone and style
 - Be concise and direct. Lead with the answer or action, not the reasoning.
@@ -516,7 +519,7 @@ class AgentExecutor:
         # 4. If query mentions phone numbers or tools, require the tool planner
         if re.search(r"\b\d{7,}\b", t):
             return False
-        if any(w in t for w in ["whatsapp", "whtsapp", "email", "gmail", "inbox", "calendar"]):
+        if any(w in t for w in ["whatsapp", "whtsapp", "email", "gmail", "inbox", "calendar", "git", "github", "commit", "push", "pull", "repo", "branch"]):
             return False
 
         # 3. Action keywords that strictly require the tool planner
@@ -526,7 +529,8 @@ class AgentExecutor:
             "create file", "write file", "make a file", "save to", "save this to",
             "delete file", "remove file", "read file", "list directory", "list files", "ls -",
             "search web", "google ", "web search", "browse ", "fetch url", "download ",
-            "screenshot", "kill process", "check cpu", "system status", "set volume"
+            "screenshot", "kill process", "check cpu", "system status", "set volume",
+            "git ", "commit ", "push ", "pull ", "branch ", "checkout ", "stash "
         ]
         if any(k in t for k in action_keywords):
             return False

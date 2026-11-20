@@ -42,6 +42,69 @@ tools:
     description: Check email connection status
     level: auto
   evil_tool: deny
+  git_status:
+    description: Get git repository status
+    level: auto
+  git_diff:
+    description: Show git diff
+    level: auto
+  git_log:
+    description: View git commit history
+    level: auto
+  git_commit:
+    description: Stage files and commit
+    level: confirm
+  git_push:
+    description: Push commits to remote
+    level: confirm
+  git_pull:
+    description: Pull commits from remote
+    level: confirm
+  git_branch:
+    description: Manage git branches
+    level: auto
+  git_checkout:
+    description: Switch branch or checkout commit
+    level: confirm
+  git_stash:
+    description: Stash uncommitted changes
+    level: confirm
+  git_clone:
+    description: Clone git repository
+    level: confirm
+  git_run:
+    description: Run arbitrary git command
+    level: confirm
+  github_create_pr:
+    description: Create GitHub pull request
+    level: confirm
+  github_list_prs:
+    description: List GitHub pull requests
+    level: auto
+  github_view_pr:
+    description: View GitHub pull request details
+    level: auto
+  github_merge_pr:
+    description: Merge GitHub pull request
+    level: confirm
+  github_create_issue:
+    description: Create GitHub issue
+    level: confirm
+  github_list_issues:
+    description: List GitHub issues
+    level: auto
+  github_view_issue:
+    description: View GitHub issue details
+    level: auto
+  github_close_issue:
+    description: Close GitHub issue
+    level: confirm
+  github_repo_view:
+    description: View GitHub repository details
+    level: auto
+  github_run:
+    description: Run arbitrary GitHub CLI command
+    level: confirm
   list_directory:
     description: List directory contents
     level: auto

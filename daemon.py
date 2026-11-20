@@ -480,6 +480,296 @@ class Daemon:
         except Exception as e:
             logger.warning(f"Google Calendar tool not loaded: {e}")
 
+        try:
+            from tools.code.github_tool import GitHubTool
+            _gh_tool = GitHubTool()
+            tool_defs.append({
+                'name': 'git_status',
+                'description': 'Get current Git repository status (active branch, staged/unstaged changes, untracked files, recent commits).',
+                'handler': functools.partial(GitHubTool.git_status, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path (defaults to current directory or detected git root)'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'git_diff',
+                'description': 'Show git diff of unstaged or staged changes, optionally for a specific file.',
+                'handler': functools.partial(GitHubTool.git_diff, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'cached': {'type': 'boolean', 'description': 'Show staged changes (--staged/--cached) if true, unstaged if false'},
+                        'file_path': {'type': 'string', 'description': 'Optional file path to limit the diff'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'git_log',
+                'description': 'View recent git commit history.',
+                'handler': functools.partial(GitHubTool.git_log, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'limit': {'type': 'integer', 'description': 'Number of commits to show (default 10)'},
+                        'oneline': {'type': 'boolean', 'description': 'Show one-line summary if true'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'git_commit',
+                'description': 'Stage files and create a git commit with a message.',
+                'handler': functools.partial(GitHubTool.git_commit, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'message': {'type': 'string', 'description': 'Commit message'},
+                        'files': {'type': 'string', 'description': 'Optional specific file(s) to stage (defaults to all files)'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['message'],
+                },
+            })
+            tool_defs.append({
+                'name': 'git_push',
+                'description': 'Push commits to remote git repository (e.g. origin main).',
+                'handler': functools.partial(GitHubTool.git_push, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'branch': {'type': 'string', 'description': 'Branch name to push (optional, pushes current branch by default)'},
+                        'remote': {'type': 'string', 'description': 'Remote name (default: origin)'},
+                        'set_upstream': {'type': 'boolean', 'description': 'Set upstream (-u) on push'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'git_pull',
+                'description': 'Pull latest changes from remote git repository.',
+                'handler': functools.partial(GitHubTool.git_pull, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'branch': {'type': 'string', 'description': 'Branch name to pull (optional)'},
+                        'remote': {'type': 'string', 'description': 'Remote name (default: origin)'},
+                        'rebase': {'type': 'boolean', 'description': 'Use --rebase if true'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'git_branch',
+                'description': 'Manage git branches: list all branches, create a branch, delete a branch, or switch to a branch.',
+                'handler': functools.partial(GitHubTool.git_branch, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'action': {'type': 'string', 'description': 'Action to perform: "list" (default), "create", "delete", or "switch"'},
+                        'branch_name': {'type': 'string', 'description': 'Branch name (required for create, delete, switch)'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'git_checkout',
+                'description': 'Switch to a branch or commit (or create a new branch with create=true).',
+                'handler': functools.partial(GitHubTool.git_checkout, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'target': {'type': 'string', 'description': 'Branch name or commit hash'},
+                        'create': {'type': 'boolean', 'description': 'Create new branch (-b) if true'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['target'],
+                },
+            })
+            tool_defs.append({
+                'name': 'git_stash',
+                'description': 'Stash uncommitted changes (push, pop, list, drop).',
+                'handler': functools.partial(GitHubTool.git_stash, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'action': {'type': 'string', 'description': 'Action: "push" (default), "pop", "list", "drop"'},
+                        'message': {'type': 'string', 'description': 'Optional stash message'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'git_clone',
+                'description': 'Clone a git repository to local directory.',
+                'handler': functools.partial(GitHubTool.git_clone, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'url': {'type': 'string', 'description': 'Git repository URL'},
+                        'directory': {'type': 'string', 'description': 'Optional destination directory'},
+                    },
+                    'required': ['url'],
+                },
+            })
+            tool_defs.append({
+                'name': 'git_run',
+                'description': 'Run an arbitrary git command directly in the repository.',
+                'handler': functools.partial(GitHubTool.git_run, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'command': {'type': 'string', 'description': 'Git command to run (e.g. "remote -v", "tag -l", "reset HEAD~1")'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['command'],
+                },
+            })
+            tool_defs.append({
+                'name': 'github_create_pr',
+                'description': 'Create a pull request on GitHub via gh CLI.',
+                'handler': functools.partial(GitHubTool.github_create_pr, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'title': {'type': 'string', 'description': 'PR title'},
+                        'body': {'type': 'string', 'description': 'PR description/body'},
+                        'base': {'type': 'string', 'description': 'Base branch (e.g. main)'},
+                        'head': {'type': 'string', 'description': 'Head branch (e.g. feature-branch)'},
+                        'draft': {'type': 'boolean', 'description': 'Create as draft PR if true'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['title'],
+                },
+            })
+            tool_defs.append({
+                'name': 'github_list_prs',
+                'description': 'List pull requests on GitHub (state: open, closed, merged, all).',
+                'handler': functools.partial(GitHubTool.github_list_prs, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'state': {'type': 'string', 'description': 'PR state: "open" (default), "closed", "merged", "all"'},
+                        'limit': {'type': 'integer', 'description': 'Maximum number of PRs to return (default 10)'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'github_view_pr',
+                'description': 'View details and comments for a pull request on GitHub.',
+                'handler': functools.partial(GitHubTool.github_view_pr, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'pr_number': {'type': 'integer', 'description': 'Pull request number'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['pr_number'],
+                },
+            })
+            tool_defs.append({
+                'name': 'github_merge_pr',
+                'description': 'Merge a GitHub pull request.',
+                'handler': functools.partial(GitHubTool.github_merge_pr, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'pr_number': {'type': 'integer', 'description': 'Pull request number to merge'},
+                        'merge_method': {'type': 'string', 'description': 'Merge method: "merge" (default), "squash", or "rebase"'},
+                        'delete_branch': {'type': 'boolean', 'description': 'Delete head branch after merge'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['pr_number'],
+                },
+            })
+            tool_defs.append({
+                'name': 'github_create_issue',
+                'description': 'Create an issue on GitHub.',
+                'handler': functools.partial(GitHubTool.github_create_issue, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'title': {'type': 'string', 'description': 'Issue title'},
+                        'body': {'type': 'string', 'description': 'Issue description/body'},
+                        'labels': {'type': 'string', 'description': 'Comma-separated labels'},
+                        'assignees': {'type': 'string', 'description': 'Comma-separated GitHub usernames to assign'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['title'],
+                },
+            })
+            tool_defs.append({
+                'name': 'github_list_issues',
+                'description': 'List issues on GitHub (state: open, closed, all).',
+                'handler': functools.partial(GitHubTool.github_list_issues, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'state': {'type': 'string', 'description': 'Issue state: "open" (default), "closed", "all"'},
+                        'limit': {'type': 'integer', 'description': 'Maximum number of issues to return (default 10)'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'github_view_issue',
+                'description': 'View details and comments of a GitHub issue.',
+                'handler': functools.partial(GitHubTool.github_view_issue, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'issue_number': {'type': 'integer', 'description': 'Issue number'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['issue_number'],
+                },
+            })
+            tool_defs.append({
+                'name': 'github_close_issue',
+                'description': 'Close a GitHub issue with an optional comment.',
+                'handler': functools.partial(GitHubTool.github_close_issue, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'issue_number': {'type': 'integer', 'description': 'Issue number to close'},
+                        'comment': {'type': 'string', 'description': 'Optional closing comment'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['issue_number'],
+                },
+            })
+            tool_defs.append({
+                'name': 'github_repo_view',
+                'description': 'View repository details on GitHub (stars, description, README, URL).',
+                'handler': functools.partial(GitHubTool.github_repo_view, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'repo': {'type': 'string', 'description': 'Optional repository owner/name (e.g. Mohit-555/jarvis-ai-agent-cli), defaults to current repository'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'github_run',
+                'description': 'Run an arbitrary GitHub CLI ("gh") command.',
+                'handler': functools.partial(GitHubTool.github_run, _gh_tool),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'command': {'type': 'string', 'description': 'gh command to run (e.g. "release list", "repo fork")'},
+                        'repo_path': {'type': 'string', 'description': 'Optional repository path'},
+                    },
+                    'required': ['command'],
+                },
+            })
+        except Exception as e:
+            logger.warning(f"GitHub tool not loaded: {e}")
+
 
         if self.config.get('enable_browser'):
             try:
