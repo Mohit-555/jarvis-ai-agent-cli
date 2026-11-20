@@ -10,9 +10,10 @@ PLUGINS_DIR = CONFIG_DIR / "plugins"
 WORKSPACE_DIR = CONFIG_DIR / "workspace"
 UPLOADS_DIR = CONFIG_DIR / "uploads"
 KEYS_DIR = CONFIG_DIR / "keys"
+SESSIONS_DIR = CONFIG_DIR / "sessions"
 
 try:
-    for d in [CONFIG_DIR, DB_DIR, LOGS_DIR, PLUGINS_DIR, WORKSPACE_DIR, UPLOADS_DIR, KEYS_DIR]:
+    for d in [CONFIG_DIR, DB_DIR, LOGS_DIR, PLUGINS_DIR, WORKSPACE_DIR, UPLOADS_DIR, KEYS_DIR, SESSIONS_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 except OSError:
     CONFIG_DIR = Path("/tmp/.jarvis")
@@ -23,7 +24,8 @@ except OSError:
     WORKSPACE_DIR = CONFIG_DIR / "workspace"
     UPLOADS_DIR = CONFIG_DIR / "uploads"
     KEYS_DIR = CONFIG_DIR / "keys"
-    for d in [CONFIG_DIR, DB_DIR, LOGS_DIR, PLUGINS_DIR, WORKSPACE_DIR, UPLOADS_DIR, KEYS_DIR]:
+    SESSIONS_DIR = CONFIG_DIR / "sessions"
+    for d in [CONFIG_DIR, DB_DIR, LOGS_DIR, PLUGINS_DIR, WORKSPACE_DIR, UPLOADS_DIR, KEYS_DIR, SESSIONS_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_CONFIG = {

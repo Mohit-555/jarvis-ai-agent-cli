@@ -281,7 +281,10 @@ class JarvisCLI:
                     if mem and hasattr(mem, "profile"):
                         mem.profile.set("language", lang)
                 self._print_inline(f"Language updated to: {lang}", style=P["success"])
-            
+
+        elif verb in ("/sessions", "/session"):
+            self._handle_sessions_command(arg)
+
         elif verb == "/tools":
             if not self.daemon:
                 self._print_inline("Daemon not running", style=P["warn"]); return None
@@ -467,6 +470,7 @@ class JarvisCLI:
             ("/power", "Toggle instant tool execution (no y/n prompts)"),
             ("/verbose", "Toggle clean vs detailed debug logs"),
             ("/profile", "View or change user name & language"),
+            ("/sessions", "List, load, view, or manage conversation sessions"),
             ("/theme", "Switch theme"),
             ("/help", "This help"),
         ]
@@ -487,6 +491,131 @@ class JarvisCLI:
             border_style="bright_black",
             box=box.ROUNDED,
         ))
+
+    def _handle_sessions_command(self, arg: str):
+        parts = arg.strip().split(maxsplit=1) if arg else []
+        subcmd = parts[0].lower() if parts else "list"
+        param = parts[1] if len(parts) > 1 else ""
+
+        # Handle shortcuts like `/sessions 1` or `/sessions <id>` directly
+        if subcmd not in ("list", "ls", "load", "view", "show", "resume", "delete", "rm", "clear", "new") and not param:
+            param = subcmd
+            subcmd = "load"
+
+        if subcmd in ("list", "ls"):
+            sessions = session_manager.list_sessions()
+            if not sessions:
+                self._print_inline("No saved sessions found.", style="dim")
+                return
+
+            t = Table(box=box.SIMPLE, show_header=True, header_style="bold cyan")
+            t.add_column("#", style="dim", width=3)
+            t.add_column("ID", style="cyan", width=10)
+            t.add_column("Date & Time", style="bright_black", width=18)
+            t.add_column("Turns", justify="right", style="yellow", width=7)
+            t.add_column("Title / Topic", style="white")
+
+            import datetime
+            active_id = self._session.session_id if self._session else ""
+
+            for i, s in enumerate(sessions[:20], 1):
+                sid = s.get("session_id", "")
+                is_active = (sid == active_id)
+                short_id = sid[:8] + ("*" if is_active else "")
+                id_style = "bold green" if is_active else "cyan"
+
+                mtime = s.get("last_active", s.get("created_at", 0))
+                dt_str = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+                turns = str(s.get("turns", 0))
+                title = s.get("title", "New Session")
+                if is_active:
+                    title += " [green](current)[/green]"
+
+                t.add_row(str(i), f"[{id_style}]{short_id}[/{id_style}]", dt_str, turns, title)
+
+            console.print(Panel(t, title="[bold cyan]Saved Sessions[/bold cyan]", border_style="bright_black", box=box.ROUNDED))
+            self._print_inline("Commands: /sessions load <#|id> | /sessions view <#|id> | /sessions new | /sessions delete <#|id>", style="dim")
+
+        elif subcmd in ("load", "resume"):
+            if not param:
+                self._print_inline("Usage: /sessions load <# or session_id>", style=P["warn"])
+                return
+            target = session_manager.get_session(param)
+            if not target:
+                sessions = session_manager.list_sessions()
+                if param.isdigit() and 1 <= int(param) <= len(sessions):
+                    target = session_manager.get_session(sessions[int(param) - 1]["session_id"])
+
+            if not target:
+                self._print_inline(f"Session '{param}' not found.", style=P["error"])
+                return
+
+            self._session = target
+            turns = len(target.messages) // 2
+            self._print_inline(f"✓ Resumed session {target.session_id[:8]} ({turns} turns: '{target.get_title()}')", style=P["success"])
+
+        elif subcmd in ("view", "show"):
+            if not param:
+                target = self._session
+            else:
+                target = session_manager.get_session(param)
+                if not target:
+                    sessions = session_manager.list_sessions()
+                    if param.isdigit() and 1 <= int(param) <= len(sessions):
+                        target = session_manager.get_session(sessions[int(param) - 1]["session_id"])
+
+            if not target or not target.messages:
+                self._print_inline("No messages in this session.", style="dim")
+                return
+
+            console.print(Panel(
+                f"[bold cyan]Transcript: {target.get_title()}[/bold cyan] [dim]({target.session_id[:8]})[/dim]",
+                border_style="cyan"
+            ))
+            for m in target.messages:
+                role = m.get("role", "")
+                content = m.get("content", "")
+                if role == "user":
+                    console.print(_user_line(content))
+                elif role == "assistant":
+                    console.print(_ai_prefix() + Text(content, style="white"))
+                    console.print()
+
+        elif subcmd == "new":
+            if self.daemon:
+                agent = self.daemon.get_service("agent")
+                if agent and hasattr(agent, "reset"):
+                    agent.reset()
+            self._session = session_manager.create_session()
+            self._history = InMemoryHistory()
+            self._print_inline(f"✓ Started new session {self._session.session_id[:8]}", style=P["success"])
+
+        elif subcmd in ("delete", "rm"):
+            if not param:
+                self._print_inline("Usage: /sessions delete <# or session_id>", style=P["warn"])
+                return
+            target = session_manager.get_session(param)
+            if not target:
+                sessions = session_manager.list_sessions()
+                if param.isdigit() and 1 <= int(param) <= len(sessions):
+                    target = session_manager.get_session(sessions[int(param) - 1]["session_id"])
+
+            if target:
+                target_id = target.session_id
+                session_manager.delete_session(target_id)
+                self._print_inline(f"✓ Deleted session {target_id[:8]}", style=P["success"])
+                if self._session and self._session.session_id == target_id:
+                    self._session = session_manager.create_session()
+            else:
+                self._print_inline(f"Session '{param}' not found.", style=P["error"])
+
+        elif subcmd == "clear":
+            count = session_manager.clear_all_sessions()
+            self._session = session_manager.create_session()
+            self._print_inline(f"✓ Cleared {count} saved sessions.", style=P["success"])
+
+        else:
+            self._print_inline(f"Unknown sessions command: '{subcmd}'. Try: /sessions list, load, view, new, delete", style=P["warn"])
 
     def _handle_model_switch(self, arg: str):
         """Provider + model selector — identical logic to original, just cleaner UI."""
