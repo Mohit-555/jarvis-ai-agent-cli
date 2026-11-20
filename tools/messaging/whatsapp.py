@@ -350,6 +350,17 @@ class WhatsAppTool:
             return result[0]
         return "Timed out reading chat."
 
+    def search_contact(self, query: str) -> str:
+        result = []
+        def _run():
+            result.append(self._search_contact_playwright(query))
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=90)
+        if result:
+            return result[0]
+        return "Timed out searching WhatsApp contact."
+
     def _send_wame(self, number: str, message: str) -> str:
         encoded = urllib.parse.quote(message)
         url = f"https://wa.me/{number}?text={encoded}"
@@ -703,3 +714,55 @@ class WhatsAppTool:
                 continue
 
         return unread_chats
+
+    def _search_contact_playwright(self, query: str) -> str:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            return "Playwright not available"
+
+        try:
+            cdp_url = _ensure_brave_with_cdp()
+            if not cdp_url:
+                return "Could not connect to browser."
+
+            with sync_playwright() as p:
+                browser = p.chromium.connect_over_cdp(cdp_url)
+                context = browser.contexts[0]
+                wa_page = None
+                for page in context.pages:
+                    if "web.whatsapp.com" in page.url:
+                        wa_page = page
+                        break
+                if not wa_page:
+                    wa_page = context.new_page()
+                    wa_page.goto("https://web.whatsapp.com", timeout=45000)
+
+                wa_page.bring_to_front()
+                load_err = _wait_for_wa_loaded(wa_page)
+                if load_err:
+                    return load_err
+
+                search_err = _open_chat_by_search(wa_page, query)
+                if search_err:
+                    return search_err
+
+                wa_page.wait_for_timeout(1500)
+                main_header = wa_page.locator("#main header").first
+                if main_header.is_visible(timeout=4000):
+                    lines = [ln.strip() for ln in main_header.inner_text().split("\n") if ln.strip()]
+                    name = lines[0] if lines else query
+                    subtitle = " - ".join(lines[1:]) if len(lines) > 1 else ""
+
+                    if "(you)" in subtitle.lower() or "message yourself" in subtitle.lower() or "(you)" in name.lower():
+                        return f"WhatsApp Contact for '{query}' is YOUR OWN NUMBER: {name} (You)."
+
+                    if _is_phone_number(name):
+                        return f"WhatsApp contact for '{query}' is NOT saved in your contacts under any name. It is an unsaved number: {name}."
+
+                    details = f" - {subtitle}" if subtitle else ""
+                    return f"WhatsApp contact for '{query}' is SAVED AS '{name}'{details}."
+
+                return f"Opened chat for '{query}' in WhatsApp Web, but contact header is not visible."
+        except Exception as e:
+            return f"Error searching WhatsApp contact: {e}"

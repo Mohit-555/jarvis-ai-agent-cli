@@ -355,6 +355,21 @@ class Daemon:
                     'required': ['contact'],
                 },
             })
+            tool_defs.append({
+                'name': 'whatsapp_search_contact',
+                'description': (
+                    'Search for a phone number or contact name in WhatsApp Web to find out who it belongs to '
+                    'and view their profile/status details.'
+                ),
+                'handler': functools.partial(WhatsAppTool.search_contact, _wa),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {'type': 'string', 'description': 'Phone number (e.g. "9315878702") or contact name to search on WhatsApp'},
+                    },
+                    'required': ['query'],
+                },
+            })
         except Exception as e:
             logger.warning(f"WhatsApp tool not loaded: {e}")
 

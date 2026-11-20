@@ -33,13 +33,22 @@ Tool results appear as follow-up messages. Use them to decide your next action.
 - Prioritize writing safe, correct code. Avoid introducing security vulnerabilities.
 
 # Using your tools
-- write_file: Write content to a file. The "content" field must be the FULL actual content (complete essay, full note, working code). NEVER use the user's query as the content.
+- whatsapp_send: Send a WhatsApp message to a phone number or contact name.
+- whatsapp_check_unread: Check how many unread chats exist on WhatsApp Web.
+- whatsapp_read_unread: Read recent incoming unread messages from WhatsApp Web.
+- whatsapp_read_chat: Read recent messages from a specific contact on WhatsApp.
+- whatsapp_search_contact: Search a contact or phone number on WhatsApp Web to find out whose number it is.
+- email_read_inbox / email_search / email_read: Read and search your personal email inbox.
+- calendar_list_events / calendar_create_event: Manage and list Google Calendar events.
+- write_file: Write content to a file. The "content" field must be the FULL actual content.
 - read_file: Read a file. Use this before editing existing files.
-- open_app: Open a desktop application (calculator, clock, browser, terminal, etc.).
-- shell_exec: Run shell commands. Use for package management, file operations, system commands.
+- open_app: Open a desktop application (calculator, clock, brave browser, terminal, etc.).
+- shell_exec: Run shell commands.
 - web_search: Search the web for information.
 - web_fetch: Fetch the content of a URL.
 - ask_user: Ask the user a question when you need clarification.
+
+You HAVE integrated capabilities to interact with WhatsApp Web, personal emails, local files, shell commands, and the browser using your tools. If the user asks whether you can access or see WhatsApp, answer YES and explain what WhatsApp actions you can perform. Never claim you lack access to WhatsApp.
 
 # Tone and style
 - Be concise and direct. Lead with the answer or action, not the reasoning.
@@ -488,6 +497,16 @@ class AgentExecutor:
         # 2. Greeting with name or common follow-up (e.g. "hi jarvis", "hello buddy, how are you?", "hey jarvis what's up")
         if re.match(r"^(hi|hello|hey|hii|namaste|hlo)\b[\s\w,!-]*\b(jarvis|bro|buddy|friend|bhai)?[\s,!-]*([?]|how are you|kya haal|who are you|kaise ho|what's up|whats up|help me)?\s*$", t):
             return True
+
+        # 3. Questions about agent capabilities (e.g. "do you have ability to see in whatsapp", "can you read emails")
+        if any(p in t for p in ["ability", "can you", "kya tum", "kya aap", "capabilities", "features", "kya kar sakte"]):
+            return True
+
+        # 4. If query mentions phone numbers or tools, require the tool planner
+        if re.search(r"\b\d{7,}\b", t):
+            return False
+        if any(w in t for w in ["whatsapp", "whtsapp", "email", "gmail", "inbox", "calendar"]):
+            return False
 
         # 3. Action keywords that strictly require the tool planner
         action_keywords = [
