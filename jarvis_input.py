@@ -143,7 +143,7 @@ class SlashCompleter(Completer):
 def _make_style() -> Style:
     return Style.from_dict({
         # ── Input area ──
-        "prompt":                           "bold ansicyan",
+        "prompt":                           "bold #25C5DD",
 
         # ── Completion dropdown ──
         "completion-menu":                  "bg:#161b22 ansigray",
@@ -188,7 +188,7 @@ def _prompt_str() -> AnyFormattedText:
             except Exception:
                 pass
 
-    return FormattedText([("class:prompt", "›  ", _on_prompt_click)])
+    return FormattedText([("class:prompt", "YOU ›  ", _on_prompt_click)])
 
 # ── Key bindings ──────────────────────────────────────────────────────────────
 
@@ -249,6 +249,9 @@ class JarvisInput:
         provider = self.config.get("llm_provider", "ollama")
         key      = f"{provider}_model"
         model    = self.config.get(key, "")
+        mode     = self.config.get("execution_mode", "normal")
+        mode_str = "power ⚡" if mode == "power" else "normal"
+        mode_cls = "class:ansired" if mode == "power" else "class:ansigray"
 
         def _on_commands_click(mouse_event: MouseEvent):
             if mouse_event.event_type == MouseEventType.MOUSE_UP:
@@ -265,6 +268,8 @@ class JarvisInput:
             ("class:ansicyan", f" {provider}"),
             ("class:ansigray", " · "),
             ("class:ansicyan", f"{model}"),
+            ("class:ansigray", " · "),
+            (mode_cls, f"{mode_str}"),
             ("class:ansigray", " · "),
             ("class:ansigray", f"{self._turns} turns"),
             ("class:ansigray", "    "),

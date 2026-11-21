@@ -497,6 +497,7 @@ class AgentExecutor:
 
     def submit_answer(self, answer: str):
         self._ask_response = answer
+        event_bus.emit(EVENTS["USER_RESPONSE"], answer=answer)
         self._ask_event.set()
 
     async def _direct_llm_stream(self, task: str, session: Session = None) -> AsyncGenerator[str, None]:

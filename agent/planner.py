@@ -112,6 +112,7 @@ class Planner:
             "- ask_user: Ask the user an interactive question with selectable options (args: {\"question\": \"...\", \"options\": [\"opt1\", \"opt2\", \"Other\"], \"multiple\": false, \"title\": \"...\"})\n"
             "If no tool is needed, leave TOOL empty.\n"
             "ROUTING RULES:\n"
+            "- 'ask user X / ask me X / first ask X / clarify X / prompt user X / ask what type of X' → ask_user with question='X' and appropriate options\n"
             "- 'git status/check git/repo status/kya changes hain' → git_status\n"
             "- 'git diff/show diff/kya change hua hai' → git_diff\n"
             "- 'git log/show commits/recent commits' → git_log\n"

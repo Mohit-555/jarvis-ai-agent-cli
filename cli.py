@@ -91,14 +91,16 @@ def _render_tool_call(name: str, arg: str = "", result: str = "") -> Text:
 
 def _user_line(text: str) -> Text:
     t = Text()
-    t.append("you  ", style=P["user"])
-    t.append(text)
+    t.append("YOU ", style="bold #25C5DD")
+    t.append("› ", style="dim")
+    t.append(text, style="white")
     return t
 
 
 def _ai_prefix() -> Text:
     t = Text()
-    t.append("J›   ", style=P["ai"])
+    t.append("JARVIS ", style="bold #25C5DD")
+    t.append("› ", style="dim")
     return t
 
 
@@ -801,36 +803,73 @@ class JarvisCLI:
                     q_data = {"question": payload_str}
 
                 if hasattr(self, "_active_status") and self._active_status:
-                    try: self._active_status.stop()
-                    except Exception: pass
+                    try:
+                        self._active_status.stop()
+                    except Exception:
+                        pass
+                    self._active_status = None
+                try:
+                    import sys
+                    sys.stdout.write("\r\x1b[K")
+                    sys.stdout.flush()
+                except Exception:
+                    pass
 
                 answer = await QuestionDialog.ask_async(q_data)
+                if answer:
+                    console.print(Text(f"YOU › {answer}", style="bold #25C5DD"))
                 agent.submit_answer(answer)
 
-                if hasattr(self, "_active_status") and self._active_status:
-                    try: self._active_status.start()
-                    except Exception: pass
+                status = console.status(StatusIndicator.render(StatusState.EXECUTING, "processing…"), spinner="dots")
+                status.start()
+                self._active_status = status
 
             elif chunk.startswith("[ASK:"):
                 question = chunk[5:].rstrip("]\n")
                 if hasattr(self, "_active_status") and self._active_status:
-                    try: self._active_status.stop()
-                    except Exception: pass
+                    try:
+                        self._active_status.stop()
+                    except Exception:
+                        pass
+                    self._active_status = None
+                try:
+                    import sys
+                    sys.stdout.write("\r\x1b[K")
+                    sys.stdout.flush()
+                except Exception:
+                    pass
 
                 answer = await QuestionDialog.ask_async(question)
+                if answer:
+                    console.print(Text(f"YOU › {answer}", style="bold #25C5DD"))
                 agent.submit_answer(answer)
 
-                if hasattr(self, "_active_status") and self._active_status:
-                    try: self._active_status.start()
-                    except Exception: pass
+                status = console.status(StatusIndicator.render(StatusState.EXECUTING, "processing…"), spinner="dots")
+                status.start()
+                self._active_status = status
 
             elif agent._pending_ask:
                 if hasattr(self, "_active_status") and self._active_status:
-                    try: self._active_status.stop()
-                    except Exception: pass
+                    try:
+                        self._active_status.stop()
+                    except Exception:
+                        pass
+                    self._active_status = None
+                try:
+                    import sys
+                    sys.stdout.write("\r\x1b[K")
+                    sys.stdout.flush()
+                except Exception:
+                    pass
 
                 answer = await QuestionDialog.ask_async(agent._pending_ask)
+                if answer:
+                    console.print(Text(f"YOU › {answer}", style="bold #25C5DD"))
                 agent.submit_answer(answer)
+
+                status = console.status(StatusIndicator.render(StatusState.EXECUTING, "processing…"), spinner="dots")
+                status.start()
+                self._active_status = status
 
                 if hasattr(self, "_active_status") and self._active_status:
                     try: self._active_status.start()
@@ -909,9 +948,9 @@ class JarvisCLI:
 
     async def _run_async_loop(self):
         _eof = 0
-        while True:
-            self._render_status()
+        from ui.status_indicator import StatusIndicator, StatusState
 
+        while True:
             user_input = await self._ask()
             if not user_input:
                 user_input = user_input.strip()
@@ -993,23 +1032,20 @@ class JarvisCLI:
 
             self._history.append_string(user_input)
 
-            # Echo user message
-            console.print(_user_line(user_input))
-            console.print()
-
             # Stream response
             full = ""
-            status = console.status("[cyan]thinking…[/cyan]", spinner="dots")
+            status = console.status(StatusIndicator.render(StatusState.THINKING), spinner="dots")
             status.start()
             self._active_status = status
             live = None
+            ai_prefix_shown = False
 
             def on_step(**kwargs):
                 desc = kwargs.get("description", "")
                 tool = kwargs.get("tool", "")
                 label = desc or tool or "processing"
                 try:
-                    status.update(f"[cyan]{label}…[/cyan]")
+                    status.update(StatusIndicator.render(StatusState.EXECUTING, label))
                 except Exception:
                     pass
 
@@ -1031,6 +1067,9 @@ class JarvisCLI:
                                 status.stop()
                             except Exception:
                                 pass
+                        if not ai_prefix_shown:
+                            console.print(_ai_prefix())
+                            ai_prefix_shown = True
                         if live is None:
                             live = Live(console=console, refresh_per_second=12)
                             live.start()
@@ -1044,7 +1083,7 @@ class JarvisCLI:
                     try: live.stop()
                     except Exception: pass
                     live = None
-                console.print(f"\n[red]Error: {e}[/red]")
+                console.print(StatusIndicator.render(StatusState.ERROR, str(e)))
             finally:
                 self._active_status = None
                 if status:
