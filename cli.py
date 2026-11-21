@@ -815,9 +815,12 @@ class JarvisCLI:
                 except Exception:
                     pass
 
+                console.print()
                 answer = await QuestionDialog.ask_async(q_data)
                 if answer:
-                    console.print(Text(f"YOU › {answer}", style="bold #25C5DD"))
+                    console.print(_user_line(answer))
+                    console.print()
+                self._ai_prefix_shown = False
                 agent.submit_answer(answer)
 
                 status = console.status(StatusIndicator.render(StatusState.EXECUTING, "processing…"), spinner="dots")
@@ -839,9 +842,12 @@ class JarvisCLI:
                 except Exception:
                     pass
 
+                console.print()
                 answer = await QuestionDialog.ask_async(question)
                 if answer:
-                    console.print(Text(f"YOU › {answer}", style="bold #25C5DD"))
+                    console.print(_user_line(answer))
+                    console.print()
+                self._ai_prefix_shown = False
                 agent.submit_answer(answer)
 
                 status = console.status(StatusIndicator.render(StatusState.EXECUTING, "processing…"), spinner="dots")
@@ -862,9 +868,12 @@ class JarvisCLI:
                 except Exception:
                     pass
 
+                console.print()
                 answer = await QuestionDialog.ask_async(agent._pending_ask)
                 if answer:
-                    console.print(Text(f"YOU › {answer}", style="bold #25C5DD"))
+                    console.print(_user_line(answer))
+                    console.print()
+                self._ai_prefix_shown = False
                 agent.submit_answer(answer)
 
                 status = console.status(StatusIndicator.render(StatusState.EXECUTING, "processing…"), spinner="dots")
@@ -1038,7 +1047,7 @@ class JarvisCLI:
             status.start()
             self._active_status = status
             live = None
-            ai_prefix_shown = False
+            self._ai_prefix_shown = False
 
             def on_step(**kwargs):
                 desc = kwargs.get("description", "")
@@ -1067,9 +1076,9 @@ class JarvisCLI:
                                 status.stop()
                             except Exception:
                                 pass
-                        if not ai_prefix_shown:
+                        if not getattr(self, "_ai_prefix_shown", False):
                             console.print(_ai_prefix())
-                            ai_prefix_shown = True
+                            self._ai_prefix_shown = True
                         if live is None:
                             live = Live(console=console, refresh_per_second=12)
                             live.start()

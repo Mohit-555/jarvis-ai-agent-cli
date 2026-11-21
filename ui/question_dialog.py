@@ -2,14 +2,16 @@
 ui/question_dialog.py  —  Modern OpenCode CLI-style Centered Interactive Question Dialog
 
 Features:
-  • Single-select (◉ / ○), Multi-select ([x] / [ ]), Yes/No confirm, and Free-form text questions
-  • Searchable selection list with real-time keyword filtering
-  • Custom 'Other' option with inline text input
-  • Multi-question wizard with progress indicator (e.g. 'Question 1 of 3')
-  • Required and Optional questions (with Skip action)
-  • Centered box layout with dark charcoal styling and cyan/purple rounded borders (╭─ ─╮)
-  • Keyboard controls: ↑/↓ navigate, Space toggle, Enter submit, Tab switch actions, Esc cancel
-  • Terminal boundary clamping to prevent clipping during resize
+  • Self-contained component floating over terminal background
+  • Dark charcoal background (#222222) with thin cyan border (#24C7DF)
+  • Purple (#a855f7) secondary accent for selection arrows & badges
+  • Horizontally centered, dynamic width (65–75% of terminal width, clamped 48–86 cols)
+  • Dynamic height according to options count, with automatic viewport scrolling for large lists
+  • Selected option: highlighted dark background (#2d333b) + bold bright cyan text (#24C7DF)
+  • Normal option: light gray (#d4d4d8) on dark charcoal
+  • Multi-select with checkmarks ([x] / [ ]), Single-select radio (◉ / ○), Yes/No confirm
+  • Instant search filtering on keystroke, inline 'Other' text input
+  • Smooth keyboard navigation: ↑/↓, Enter submit, Tab switch actions, Esc cancel
 """
 
 import sys
@@ -25,24 +27,44 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit import PromptSession
 
-# OpenCode-inspired Dark Charcoal & Cyan/Purple Palette
+# OpenCode-inspired Dark Charcoal (#222222) & Cyan (#24C7DF) with Purple (#a855f7) Accents
 STYLE = Style.from_dict({
-    "dialog.border": "#25C5DD bold",
-    "dialog.title": "#25C5DD bold",
-    "dialog.progress": "#888888",
-    "dialog.optional": "#eab308 italic",
-    "dialog.question": "#ffffff bold",
-    "dialog.description": "#a0a0a0",
-    "dialog.search": "#38bdf8 italic",
-    "option.cursor": "#25C5DD bold",
-    "option.active": "#25C5DD bold",
-    "option.inactive": "#d4d4d8",
-    "option.checked": "#10b981 bold",
-    "option.unchecked": "#71717a",
-    "hint.key": "#25C5DD bold",
-    "hint.desc": "#71717a",
-    "button.active": "reverse #25C5DD bold",
-    "button.inactive": "#71717a",
+    # Reset prompt_toolkit built-in dialog background
+    "dialog": "noinherit",
+    "dialog.body": "noinherit",
+
+    # Base question box & borders
+    "qbox.bg": "bg:#222222",
+    "qbox.border": "#24C7DF bg:#222222",
+    "qbox.title": "#24C7DF bold bg:#222222",
+    "qbox.progress": "#9ca3af bg:#222222",
+    "qbox.optional": "#eab308 italic bg:#222222",
+    "qbox.question": "#ffffff bold bg:#222222",
+    "qbox.description": "#9ca3af bg:#222222",
+    "qbox.search": "#38bdf8 italic bg:#222222",
+    "qbox.scroll": "#6b7280 italic bg:#222222",
+
+    # Normal options (light gray on dark charcoal)
+    "opt.normal": "#d4d4d8 bg:#222222",
+    "opt.normal.indicator": "#71717a bg:#222222",
+    "opt.normal.icon": "#71717a bg:#222222",
+
+    # Selected option (highlighted dark background + bold bright cyan text)
+    "opt.selected": "#24C7DF bold bg:#2d333b",
+    "opt.selected.indicator": "#a855f7 bold bg:#2d333b",
+    "opt.selected.icon": "#24C7DF bold bg:#2d333b",
+
+    # Checked items in multi-select
+    "opt.checked": "#10b981 bold bg:#222222",
+    "opt.checked.selected": "#10b981 bold bg:#2d333b",
+
+    # Keyboard shortcut hints in footer
+    "hint.text": "#71717a bg:#222222",
+    "hint.accent": "#24C7DF bg:#222222",
+
+    # Action buttons (Submit / Skip)
+    "btn.active": "reverse #24C7DF bold",
+    "btn.inactive": "#71717a bg:#222222",
 })
 
 
@@ -137,12 +159,16 @@ class QuestionDialog:
         if not has_other and not is_confirm:
             raw_options.append("Other (Type custom answer)")
 
+        # Headless fallback
+        if not sys.stdin.isatty():
+            return raw_options[0] if raw_options else ""
+
         # State tracking
         search_query = [""]
         highlight_idx = [0]
         checked_indices = set()
         user_result = [""]
-        focus_target = ["options"]  # "options", "submit", "skip", "cancel"
+        focus_target = ["options"]  # "options", "submit", "skip"
 
         def get_filtered_options():
             q = search_query[0].lower().strip()
@@ -248,131 +274,197 @@ class QuestionDialog:
                 highlight_idx[0] = 0
 
         def get_formatted_dialog():
-            term_w = shutil.get_terminal_size().columns
-            # Clamp dialog width: max 74 cols, min 44 cols
-            box_w = min(max(44, term_w - 6), 74)
+            term_size = shutil.get_terminal_size((80, 24))
+            term_w = term_size.columns
+            term_h = term_size.lines
+
+            # Dynamic width: 65% - 75% of terminal width, clamped between 48 and 86
+            target_w = int(term_w * 0.70)
+            box_w = min(max(48, target_w), 86)
+            box_w = min(box_w, max(40, term_w - 4))
             inner_w = box_w - 4
+
+            # Left margin spaces without any background style (transparent terminal bg)
             left_margin = max(0, (term_w - box_w) // 2)
             margin_sp = " " * left_margin
 
             lines = []
-            
-            # Top rounded border: ╭─ Title ─╮
-            title_text = f"╭─ {title} "
-            dash_len = max(2, box_w - len(title_text) - 1)
-            lines.append(("class:dialog.border", f"{margin_sp}{title_text}{'─' * dash_len}╮\n"))
 
-            # Progress & Optional badge line
-            prog_text = progress or ""
+            def append_row(segments, row_bg="class:qbox.bg"):
+                """Helper to append a perfectly aligned row inside the dark charcoal box."""
+                # Calculate total character width of segments
+                seg_len = sum(len(text) for _, text in segments)
+                pad_len = max(0, inner_w - seg_len)
+                
+                # Margin outside the box has NO style (transparent terminal)
+                lines.append(("", margin_sp))
+                # Left border
+                lines.append(("class:qbox.border", "│ "))
+                # Content
+                for style, text in segments:
+                    lines.append((style, text))
+                # Inner padding fills up the rest of the dark charcoal row
+                if pad_len > 0:
+                    lines.append((row_bg, " " * pad_len))
+                # Right border
+                lines.append(("class:qbox.border", " │\n"))
+
+            # 1. Top rounded border: ╭─ Title ─╮
+            clean_title = title.strip()
+            title_prefix = f"╭─ {clean_title} "
+            if len(title_prefix) > box_w - 4:
+                title_prefix = title_prefix[:box_w - 6] + "… "
+            dash_len = max(2, box_w - len(title_prefix) - 1)
+            lines.append(("", margin_sp))
+            lines.append(("class:qbox.border", f"{title_prefix}{'─' * dash_len}╮\n"))
+
+            # 2. Progress & Optional badge line
+            prog_text = progress.strip() if progress else ""
             opt_badge = "[Optional]" if not is_required else ""
-            pad_mid = max(1, inner_w - len(prog_text) - len(opt_badge))
-            lines.append(("class:dialog.border", f"{margin_sp}│  "))
-            lines.append(("class:dialog.progress", prog_text))
-            lines.append(("", " " * pad_mid))
-            lines.append(("class:dialog.optional", opt_badge))
-            lines.append(("class:dialog.border", "  │\n"))
+            if prog_text or opt_badge:
+                badge_row = []
+                if prog_text:
+                    badge_row.append(("class:qbox.progress", prog_text))
+                if prog_text and opt_badge:
+                    gap = max(1, inner_w - len(prog_text) - len(opt_badge))
+                    badge_row.append(("class:qbox.bg", " " * gap))
+                if opt_badge:
+                    badge_row.append(("class:qbox.optional", opt_badge))
+                append_row(badge_row)
 
-            # Question Text
-            q_text = question[:inner_w]
-            q_pad = max(0, inner_w - len(q_text))
-            lines.append(("class:dialog.border", f"{margin_sp}│  "))
-            lines.append(("class:dialog.question", q_text + (" " * q_pad)))
-            lines.append(("class:dialog.border", "  │\n"))
+            # 3. Question Text (with ellipsis if exceeding inner_w)
+            q_display = question.strip()
+            if len(q_display) > inner_w:
+                q_display = q_display[:inner_w - 1] + "…"
+            append_row([("class:qbox.question", q_display)])
 
-            # Description (if provided)
-            if description:
-                d_text = description[:inner_w]
-                d_pad = max(0, inner_w - len(d_text))
-                lines.append(("class:dialog.border", f"{margin_sp}│  "))
-                lines.append(("class:dialog.description", d_text + (" " * d_pad)))
-                lines.append(("class:dialog.border", "  │\n"))
+            # 4. Description (if provided)
+            if description.strip():
+                d_display = description.strip()
+                if len(d_display) > inner_w:
+                    d_display = d_display[:inner_w - 1] + "…"
+                append_row([("class:qbox.description", d_display)])
 
-            # Search indicator (if user typed search filter)
+            # 5. Search indicator (if user typed filter)
             if search_query[0]:
                 search_str = f"Filter: '{search_query[0]}'"
-                s_pad = max(0, inner_w - len(search_str))
-                lines.append(("class:dialog.border", f"{margin_sp}│  "))
-                lines.append(("class:dialog.search", search_str + (" " * s_pad)))
-                lines.append(("class:dialog.border", "  │\n"))
+                if len(search_str) > inner_w:
+                    search_str = search_str[:inner_w - 1] + "…"
+                append_row([("class:qbox.search", search_str)])
 
-            lines.append(("class:dialog.border", f"{margin_sp}│  {' ' * inner_w}  │\n"))
+            # Blank separator
+            append_row([])
 
-            # Render filtered options
+            # 6. Render options with viewport scroll window
             opts = get_filtered_options()
+            num_opts = len(opts)
+            
+            # Viewport windowing: compute max visible options so it fits gracefully
+            max_visible = min(8, max(3, term_h - 13))
+            curr_idx = highlight_idx[0]
+            if curr_idx >= num_opts:
+                curr_idx = max(0, num_opts - 1)
+                highlight_idx[0] = curr_idx
+
+            # Calculate scroll start
+            scroll_start = 0
+            if num_opts > max_visible:
+                scroll_start = max(0, min(curr_idx - (max_visible // 2), num_opts - max_visible))
+            scroll_end = min(num_opts, scroll_start + max_visible)
+
+            # Top scroll indicator
+            if scroll_start > 0:
+                append_row([("class:qbox.scroll", f"  ▲ ... {scroll_start} more above")])
+
             if not opts:
-                no_res = "  (No options match your filter)"
-                nr_pad = max(0, inner_w - len(no_res))
-                lines.append(("class:dialog.border", f"{margin_sp}│  "))
-                lines.append(("class:dialog.progress", no_res + (" " * nr_pad)))
-                lines.append(("class:dialog.border", "  │\n"))
-
-            for i, opt in enumerate(opts):
-                is_cursor = (i == highlight_idx[0] and focus_target[0] == "options")
-                cursor = "❯ " if is_cursor else "  "
-
-                if is_confirm:
-                    icon = "◉ " if is_cursor else "○ "
-                    opt_str = f"{cursor}{icon}{opt}"
-                    style = "class:option.active" if is_cursor else "class:option.inactive"
-                elif is_multiple:
+                append_row([("class:qbox.progress", "  (No options match your filter)")])
+            else:
+                for i in range(scroll_start, scroll_end):
+                    opt = opts[i]
+                    is_cursor = (i == curr_idx and focus_target[0] == "options")
                     is_checked = (opt in checked_indices)
-                    chk = "[x] " if is_checked else "[ ] "
-                    opt_str = f"{cursor}{chk}{opt}"
-                    style = "class:option.active" if is_cursor else ("class:option.checked" if is_checked else "class:option.inactive")
-                else:
-                    radio = "◉ " if is_cursor else "○ "
-                    opt_str = f"{cursor}{radio}{opt}"
-                    style = "class:option.active" if is_cursor else "class:option.inactive"
 
-                o_pad = max(0, inner_w - len(opt_str))
-                lines.append(("class:dialog.border", f"{margin_sp}│  "))
-                lines.append((style, opt_str + (" " * o_pad)))
-                lines.append(("class:dialog.border", "  │\n"))
+                    # Truncate option text to fit cleanly inside box
+                    # Reserve 6 chars for indicator and radio/checkbox
+                    avail_text = inner_w - 7
+                    opt_display = opt if len(opt) <= avail_text else (opt[:avail_text - 1] + "…")
 
-            lines.append(("class:dialog.border", f"{margin_sp}│  {' ' * inner_w}  │\n"))
+                    row_segments = []
+                    if is_cursor:
+                        row_bg = "class:opt.selected"
+                        # Secondary purple accent arrow indicator
+                        row_segments.append(("class:opt.selected.indicator", "❯ "))
+                        if is_confirm:
+                            row_segments.append(("class:opt.selected.icon", "◉ "))
+                        elif is_multiple:
+                            chk_icon = "[x] " if is_checked else "[ ] "
+                            row_segments.append(("class:opt.checked.selected" if is_checked else "class:opt.selected.icon", chk_icon))
+                        else:
+                            row_segments.append(("class:opt.selected.icon", "◉ "))
+                        row_segments.append(("class:opt.selected", opt_display))
+                    else:
+                        row_bg = "class:qbox.bg"
+                        row_segments.append(("class:opt.normal.indicator", "  "))
+                        if is_confirm:
+                            row_segments.append(("class:opt.normal.icon", "○ "))
+                            row_segments.append(("class:opt.normal", opt_display))
+                        elif is_multiple:
+                            chk_icon = "[x] " if is_checked else "[ ] "
+                            chk_style = "class:opt.checked" if is_checked else "class:opt.normal.icon"
+                            row_segments.append((chk_style, chk_icon))
+                            row_segments.append(("class:opt.normal", opt_display))
+                        else:
+                            row_segments.append(("class:opt.normal.icon", "○ "))
+                            row_segments.append(("class:opt.normal", opt_display))
 
-            # Action Buttons Row (Submit / Skip)
+                    append_row(row_segments, row_bg=row_bg)
+
+            # Bottom scroll indicator
+            if scroll_end < num_opts:
+                append_row([("class:qbox.scroll", f"  ▼ ... {num_opts - scroll_end} more below")])
+
+            # Blank separator
+            append_row([])
+
+            # 7. Action buttons row (Submit / Skip)
             actions = []
             if is_multiple:
                 sub_focused = (focus_target[0] == "submit")
-                actions.append(("class:button.active" if sub_focused else "class:button.inactive", " [ Submit ] "))
+                actions.append(("class:btn.active" if sub_focused else "class:btn.inactive", " [ Submit ] "))
             if not is_required:
                 skip_focused = (focus_target[0] == "skip")
-                actions.append(("class:button.active" if skip_focused else "class:button.inactive", " [ Skip ] "))
+                actions.append(("class:btn.active" if skip_focused else "class:btn.inactive", " [ Skip ] "))
 
             if actions:
-                lines.append(("class:dialog.border", f"{margin_sp}│  "))
-                btn_len = 0
+                btn_row = []
                 for style, text in actions:
-                    lines.append((style, text))
-                    lines.append(("", "  "))
-                    btn_len += len(text) + 2
-                lines.append(("", " " * max(0, inner_w - btn_len)))
-                lines.append(("class:dialog.border", "  │\n"))
-                lines.append(("class:dialog.border", f"{margin_sp}│  {' ' * inner_w}  │\n"))
+                    btn_row.append((style, text))
+                    btn_row.append(("class:qbox.bg", "  "))
+                append_row(btn_row)
+                append_row([])
 
-            # Keyboard shortcut hints in footer
+            # 8. Keyboard shortcut hints in footer
             if is_multiple:
                 hint = "[ ↑/↓ Move • Space Toggle • Enter Submit • Tab Action • Esc Cancel ]"
             else:
                 hint = "[ ↑/↓ Move • Enter Select • Tab Skip • Esc Cancel ]"
-            h_text = hint[:inner_w]
-            h_pad = max(0, inner_w - len(h_text))
-            lines.append(("class:dialog.border", f"{margin_sp}│  "))
-            lines.append(("class:hint.desc", h_text + (" " * h_pad)))
-            lines.append(("class:dialog.border", "  │\n"))
+            if len(hint) > inner_w:
+                hint = hint[:inner_w - 3] + "…]"
+            append_row([("class:hint.text", hint)])
 
-            # Bottom rounded border: ╰── ──╯
-            lines.append(("class:dialog.border", f"{margin_sp}╰{'─' * (box_w - 2)}╯\n"))
+            # 9. Bottom rounded border: ╰── ──╯
+            lines.append(("", margin_sp))
+            lines.append(("class:qbox.border", f"╰{'─' * (box_w - 2)}╯\n"))
 
             return lines
 
-        if not sys.stdin.isatty():
-            return raw_options[0] if raw_options else ""
-
         control = FormattedTextControl(get_formatted_dialog)
-        opts_count = len(raw_options)
-        widget_height = min(max(10, opts_count + 10), 24)
+        
+        # Calculate dynamic window height based on raw options count
+        term_h = shutil.get_terminal_size((80, 24)).lines
+        calc_h = min(len(raw_options) + 10, 22)
+        widget_height = min(max(9, calc_h), max(10, term_h - 4))
+        
         layout = Layout(HSplit([Window(content=control, height=widget_height)]))
 
         app = Application(
