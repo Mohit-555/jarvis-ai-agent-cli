@@ -29,7 +29,7 @@ from ui import (
     ThemeManager, Theme, Color, theme, color,
     Pane, Divider, Byline, KeyboardHint, Spacer,
     SpinnerAnimation, shimmer_text,
-    Dialog,
+    Dialog, QuestionDialog, StatusIndicator, StatusState,
     StatusLine,
     EnhancedInput,
     Keybindings, Binding, get_keybindings,
@@ -791,7 +791,6 @@ class JarvisCLI:
             yield "Agent not initialized."; return
         self._session.add_message("user", user_input)
         full = ""
-        from ui.question_dialog import QuestionDialog
         import json
 
         async for chunk in agent.execute_stream(user_input, self._session, config=self.config):
@@ -957,7 +956,6 @@ class JarvisCLI:
 
     async def _run_async_loop(self):
         _eof = 0
-        from ui.status_indicator import StatusIndicator, StatusState
 
         while True:
             user_input = await self._ask()
