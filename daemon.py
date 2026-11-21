@@ -157,6 +157,25 @@ class Daemon:
                 'handler': functools.partial(SystemTool.list_browser_tabs, _inst),
                 'parameters': {'type': 'object', 'properties': {}},
             })
+            tool_defs.append({
+                'name': 'get_current_media',
+                'description': 'Inspect the system to find the currently playing song, video, or audio track (YouTube on Chrome/Brave/Firefox, Spotify, VLC, etc.)',
+                'handler': functools.partial(SystemTool.get_current_media, _inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {'player': {'type': 'string', 'description': 'Optional player name filter (e.g. youtube, spotify)'}},
+                },
+            })
+            tool_defs.append({
+                'name': 'media_control',
+                'description': 'Control active media playback (play_pause, next, previous, stop)',
+                'handler': functools.partial(SystemTool.media_control, _inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {'action': {'type': 'string', 'description': 'Media action: play_pause, next, previous, stop'}},
+                    'required': ['action'],
+                },
+            })
         except Exception:
             pass
 

@@ -111,6 +111,12 @@ tools:
   scan_project:
     description: Intelligently and securely scan project structure
     level: auto
+  get_current_media:
+    description: Inspect currently playing media, song, or video
+    level: auto
+  media_control:
+    description: Control active media playback
+    level: auto
   db_query:
     description: Execute database SQL queries
     level: auto

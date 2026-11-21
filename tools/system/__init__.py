@@ -13,6 +13,8 @@ except Exception:
     _HAS_GUI_TOOLS = False
 
 
+from .media import MediaTool
+
 class SystemTool:
     def run_command(self, cmd):
         try:
@@ -236,3 +238,9 @@ class SystemTool:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
         return sorted(processes, key=lambda p: p["cpu_percent"] or 0, reverse=True)[:20]
+
+    def get_current_media(self, player=None):
+        return MediaTool().get_current_media(player)
+
+    def media_control(self, action="play_pause"):
+        return MediaTool().media_control(action)

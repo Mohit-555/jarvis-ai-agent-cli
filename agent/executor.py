@@ -227,7 +227,7 @@ class AgentExecutor:
             yield f"Created {len(steps)} steps\n"
         results = []
 
-        READ_ONLY_TOOLS = {"read_file", "web_search", "web_fetch", "list_directory", "scan_project", "db_query", "db_list_tables", "doc_read", "system_info", "clipboard_read", "process_list", "open_app", "screenshot"}
+        READ_ONLY_TOOLS = {"read_file", "web_search", "web_fetch", "list_directory", "scan_project", "db_query", "db_list_tables", "doc_read", "system_info", "clipboard_read", "process_list", "open_app", "screenshot", "get_current_media"}
 
         for iteration in range(self.max_iterations):
             remaining = [s for s in steps if s.status == "pending"]
