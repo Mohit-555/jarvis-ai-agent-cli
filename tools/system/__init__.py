@@ -221,10 +221,11 @@ class SystemTool:
         encoded = urllib.parse.quote(query)
         search_url = f"https://www.youtube.com/results?search_query={encoded}"
 
+        # Strategy 1: Direct YouTube search page scrape
         try:
             req = urllib.request.Request(
                 search_url,
-                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
             )
             with urllib.request.urlopen(req, timeout=4) as resp:
                 html = resp.read().decode("utf-8", errors="ignore")
@@ -235,6 +236,35 @@ class SystemTool:
                     return f"https://www.youtube.com/watch?v={ids[0]}&autoplay=1"
         except Exception:
             pass
+
+        # Strategy 2: DuckDuckGo HTML search for youtube.com watch links (bypasses bot walls)
+        try:
+            ddg_url = f"https://html.duckduckgo.com/html/?q={encoded}+site:youtube.com"
+            req2 = urllib.request.Request(
+                ddg_url,
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+            )
+            with urllib.request.urlopen(req2, timeout=4) as resp2:
+                html2 = resp2.read().decode("utf-8", errors="ignore")
+                ids2 = re.findall(r'(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})', html2)
+                if ids2:
+                    return f"https://www.youtube.com/watch?v={ids2[0]}&autoplay=1"
+        except Exception:
+            pass
+
+        # Strategy 3: curl with desktop User-Agent if urllib failed
+        if shutil.which("curl"):
+            try:
+                cmd = ["curl", "-sL", "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36", search_url]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                if res.returncode == 0 and res.stdout:
+                    ids3 = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', res.stdout)
+                    if not ids3:
+                        ids3 = re.findall(r'/watch\?v=([a-zA-Z0-9_-]{11})', res.stdout)
+                    if ids3:
+                        return f"https://www.youtube.com/watch?v={ids3[0]}&autoplay=1"
+            except Exception:
+                pass
 
         return search_url
 

@@ -39,7 +39,7 @@ class MediaTool:
         return env
 
     def _query_playerctl(self, target_player: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Attempt to query media metadata via playerctl CLI if installed."""
+        """Attempt to query media metadata via playerctl CLI if installed, prioritizing playing players."""
         if not shutil.which("playerctl"):
             return None
 
@@ -62,23 +62,37 @@ class MediaTool:
             )
             if res.returncode == 0 and res.stdout.strip():
                 lines = res.stdout.strip().split("\n")
-                first = lines[0]
-                parts = {}
-                for item in first.split("||"):
-                    if ":" in item:
-                        k, v = item.split(":", 1)
-                        parts[k.strip()] = v.strip()
+                playing_candidates = []
+                other_candidates = []
 
-                title = parts.get("title", "")
-                if title:
-                    return {
-                        "title": title,
-                        "artist": parts.get("artist", ""),
-                        "album": parts.get("album", ""),
-                        "player": parts.get("player", "Media Player"),
-                        "status": parts.get("status", "Playing"),
-                        "url": parts.get("url", ""),
-                    }
+                for line in lines:
+                    parts = {}
+                    for item in line.split("||"):
+                        if ":" in item:
+                            k, v = item.split(":", 1)
+                            parts[k.strip()] = v.strip()
+
+                    title = parts.get("title", "")
+                    if title:
+                        cand = {
+                            "title": title,
+                            "artist": parts.get("artist", ""),
+                            "album": parts.get("album", ""),
+                            "player": parts.get("player", "Media Player"),
+                            "status": parts.get("status", "Unknown"),
+                            "url": parts.get("url", ""),
+                        }
+                        if cand["status"].lower() == "playing":
+                            playing_candidates.append(cand)
+                        else:
+                            other_candidates.append(cand)
+
+                if playing_candidates:
+                    return playing_candidates[0]
+                if other_candidates and target_player:
+                    return other_candidates[0]
+                elif other_candidates:
+                    return other_candidates[0]
         except Exception:
             pass
         return None
@@ -135,7 +149,7 @@ class MediaTool:
         for p_dest in player_names:
             try:
                 # Get PlaybackStatus
-                status = "Playing"
+                status = "Unknown"
                 if has_gdbus:
                     cmd_status = ["gdbus", "call", "--session", "--dest", p_dest,
                                   "--object-path", "/org/mpris/MediaPlayer2",
@@ -198,7 +212,9 @@ class MediaTool:
 
         if playing_candidates:
             return playing_candidates[0]
-        if other_candidates:
+        if other_candidates and target_player:
+            return other_candidates[0]
+        elif other_candidates:
             return other_candidates[0]
 
         return None
@@ -208,8 +224,21 @@ class MediaTool:
         windows = []
         env = self._get_dbus_env()
 
+        # Try GNOME Shell Introspect DBus (native on Ubuntu GNOME Wayland / X11)
+        if shutil.which("gdbus"):
+            try:
+                cmd = ["gdbus", "call", "--session", "--dest", "org.gnome.Shell.Introspect",
+                       "--object-path", "/org/gnome/Shell/Introspect",
+                       "--method", "org.gnome.Shell.Introspect.GetWindows"]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=3, env=env)
+                if res.returncode == 0:
+                    found_titles = re.findall(r"'title':\s*<['\"]([^'\"]*)['\"]>", res.stdout)
+                    windows.extend(found_titles)
+            except Exception:
+                pass
+
         # Try wmctrl if available
-        if shutil.which("wmctrl"):
+        if not windows and shutil.which("wmctrl"):
             try:
                 res = subprocess.run(["wmctrl", "-l"], capture_output=True, text=True, timeout=3, env=env)
                 if res.returncode == 0:
@@ -242,6 +271,7 @@ class MediaTool:
                 cleaned = re.sub(r"\s*-\s*(Google Chrome|Brave|Chromium|Mozilla Firefox)$", "", t, flags=re.IGNORECASE)
                 song_title = cleaned.replace(" - YouTube", "").strip()
                 # Clean leading playback symbols or notification badges like '▶ (171) ' or '🔊 '
+                has_audio = bool(re.search(r"[🔊▶]", song_title))
                 song_title = re.sub(r"^[▶🔊⏸\s]+", "", song_title)
                 song_title = re.sub(r"^\(\d+\)\s*", "", song_title).strip()
                 if song_title and song_title.lower() != "youtube":
@@ -250,6 +280,7 @@ class MediaTool:
                         "artist": "YouTube",
                         "status": "Playing",
                         "player": "YouTube (Browser)",
+                        "has_audio_badge": has_audio,
                         "source": "window_title",
                     }
 
@@ -273,14 +304,32 @@ class MediaTool:
         Inspect the system to find the currently playing song, video, or audio track.
         Checks MPRIS2 players (Chrome, Brave, Spotify, YouTube, Firefox, VLC) and window titles.
         """
+        # Always inspect window title for active visible tabs
+        window_info = self._query_window_titles(player)
+
         # 1. Try playerctl
         info = self._query_playerctl(player)
         if not info:
             # 2. Try MPRIS DBus directly
             info = self._query_mpris_dbus(player)
-        if not info:
-            # 3. Try window title inspection
-            info = self._query_window_titles(player)
+
+        # Cross-validation: If a browser window is actively showing YouTube
+        if window_info and window_info.get("player", "").endswith("YouTube"):
+            win_title_clean = window_info.get("title", "").lower()
+            # If playerctl/MPRIS returned something, check if it matches the current window
+            if info:
+                mpris_title_clean = info.get("title", "").lower()
+                # If MPRIS is paused or reports a completely different title from the visible window,
+                # prioritize the visible window title!
+                if info.get("status", "").lower() != "playing" or (
+                    mpris_title_clean not in win_title_clean and win_title_clean not in mpris_title_clean
+                ):
+                    # Use window title as authoritative
+                    info = window_info
+            else:
+                info = window_info
+        elif not info:
+            info = window_info
 
         if not info:
             # Check if browser processes are running to give helpful guidance

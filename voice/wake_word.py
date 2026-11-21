@@ -71,7 +71,49 @@ class WakeWordListener:
         return env
 
     def _find_audio_recorder(self) -> Optional[List[str]]:
-        """Select best available audio streaming CLI."""
+        """Select best working audio streaming CLI with live hardware probe."""
+        candidates = [
+            ["arecord", "-D", "plughw:0,0", "-q", "-r", str(self.sample_rate), "-c", "1", "-f", "S16_LE", "-t", "raw"],
+            ["arecord", "-D", "default", "-q", "-r", str(self.sample_rate), "-c", "1", "-f", "S16_LE", "-t", "raw"],
+            ["arecord", "-q", "-r", str(self.sample_rate), "-c", "1", "-f", "S16_LE", "-t", "raw"],
+            ["pw-record", "--rate", str(self.sample_rate), "--channels", "1", "--format", "s16", "-"],
+            ["parec", f"--rate={self.sample_rate}", "--channels=1", "--format=s16le"],
+        ]
+        # First probe candidates live to see which one actually opens without exiting
+        env = self._get_desktop_env()
+        for cand in candidates:
+            binary = cand[0]
+            if shutil.which(binary):
+                try:
+                    p = subprocess.Popen(
+                        cand,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL,
+                        env=env
+                    )
+                    time.sleep(0.15)
+                    if p.poll() is None:
+                        # Alive and streaming!
+                        p.terminate()
+                        try:
+                            if p.stdout:
+                                p.stdout.close()
+                            p.wait(timeout=0.2)
+                        except Exception:
+                            pass
+                        return cand
+                    else:
+                        # Process died on start (e.g. Host is down / device busy)
+                        try:
+                            if p.stdout:
+                                p.stdout.close()
+                            p.terminate()
+                        except Exception:
+                            pass
+                except Exception:
+                    continue
+
+        # Static fallback if probe did not run (e.g. in mocked test environments)
         if shutil.which("pw-record"):
             return ["pw-record", "--rate", str(self.sample_rate), "--channels", "1", "--format", "s16", "-"]
         if shutil.which("arecord"):
@@ -96,12 +138,10 @@ class WakeWordListener:
             return False
         clean = re.sub(r"[?!.,;:~_`'\"()]+", " ", text.lower()).strip()
         wake_patterns = [
-            r"\bhello\s+jarvis\b",
-            r"\bhey\s+jarvis\b",
-            r"\bok\s+jarvis\b",
-            r"\bhi\s+jarvis\b",
-            r"\bsun\s+jarvis\b",
+            r"\b(hello|hey|ok|hi|sun|suno|arre|haan|play)?\s*jarvis\b",
             r"\bjarvis\b",
+            r"\bजार्विस\b",
+            r"\bजारविस\b",
         ]
         return any(re.search(pat, clean) for pat in wake_patterns)
 
@@ -188,64 +228,72 @@ class WakeWordListener:
         t.start()
 
     def _listen_loop(self):
-        """Continuous background audio stream and keyword detector."""
-        record_cmd = self._find_audio_recorder()
-        if not record_cmd:
-            return
-
+        """Continuous background audio stream and keyword detector with auto-recovery."""
         chunk_seconds = 0.5
         bytes_per_sample = 2  # S16_LE (16-bit)
         chunk_bytes = int(self.sample_rate * chunk_seconds * bytes_per_sample)
-
-        try:
-            self._proc = subprocess.Popen(
-                record_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                bufsize=chunk_bytes * 4
-            )
-        except Exception:
-            return
-
-        speech_buffer = []
-        is_speech_active = False
-        silent_count = 0
         max_chunks = int(3.0 / chunk_seconds)  # Max ~3 seconds buffer
+        env = self._get_desktop_env()
 
-        while self._running and self._proc and self._proc.poll() is None:
-            raw = self._proc.stdout.read(chunk_bytes)
-            if not raw or len(raw) < chunk_bytes:
-                time.sleep(0.05)
+        while self._running:
+            record_cmd = self._find_audio_recorder()
+            if not record_cmd:
+                time.sleep(1.5)
                 continue
 
-            # Convert to numpy int16 array
-            samples = np.frombuffer(raw, dtype=np.int16)
-            rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
-
-            if rms >= self.energy_threshold:
-                is_speech_active = True
-                silent_count = 0
-                speech_buffer.append(samples)
-            elif is_speech_active:
-                speech_buffer.append(samples)
-                silent_count += 1
-
-                # If silence for 0.8s or buffer reaches max, process phrase
-                if silent_count >= 2 or len(speech_buffer) >= max_chunks:
-                    full_audio = np.concatenate(speech_buffer)
-                    speech_buffer = []
-                    is_speech_active = False
-                    silent_count = 0
-
-                    # Process buffer for wake word
-                    self._process_audio_chunk(full_audio)
-
-        if self._proc:
             try:
-                self._proc.terminate()
+                self._proc = subprocess.Popen(
+                    record_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    bufsize=chunk_bytes * 4,
+                    env=env
+                )
             except Exception:
-                pass
-            self._proc = None
+                time.sleep(1.5)
+                continue
+
+            speech_buffer = []
+            is_speech_active = False
+            silent_count = 0
+
+            while self._running and self._proc and self._proc.poll() is None:
+                raw = self._proc.stdout.read(chunk_bytes)
+                if not raw or len(raw) < chunk_bytes:
+                    time.sleep(0.05)
+                    continue
+
+                # Convert to numpy int16 array
+                samples = np.frombuffer(raw, dtype=np.int16)
+                rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+
+                if rms >= self.energy_threshold:
+                    is_speech_active = True
+                    silent_count = 0
+                    speech_buffer.append(samples)
+                elif is_speech_active:
+                    speech_buffer.append(samples)
+                    silent_count += 1
+
+                    # If silence for 0.8s or buffer reaches max, process phrase
+                    if silent_count >= 2 or len(speech_buffer) >= max_chunks:
+                        full_audio = np.concatenate(speech_buffer)
+                        speech_buffer = []
+                        is_speech_active = False
+                        silent_count = 0
+
+                        # Process buffer for wake word
+                        self._process_audio_chunk(full_audio)
+
+            if self._proc:
+                try:
+                    self._proc.terminate()
+                except Exception:
+                    pass
+                self._proc = None
+
+            if self._running:
+                time.sleep(1.0)
 
     def _process_audio_chunk(self, audio_data: np.ndarray):
         """Transcribe speech buffer and trigger on wake word match."""
@@ -270,8 +318,8 @@ class WakeWordListener:
                     wf.setframerate(self.sample_rate)
                     wf.writeframes(audio_data.tobytes())
 
-            # Fast Whisper transcription
-            result = model.transcribe(wav_path, fp16=False, language="en")
+            # Fast Whisper transcription with automatic language / accent detection
+            result = model.transcribe(wav_path, fp16=False, language=None)
             text = result.get("text", "").strip()
 
             if self.is_wake_phrase(text):
