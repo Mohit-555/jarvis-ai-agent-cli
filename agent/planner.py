@@ -1,7 +1,9 @@
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 from core.exceptions import AgentError
+from core.logger import central_logger
 
 
 @dataclass
@@ -173,22 +175,32 @@ class Planner:
     async def plan(self, goal: str, context: str = "") -> list[Step]:
         if not self.llm:
             return [Step(id="1", description=goal, tool="", args={})]
+        start_t = time.time()
+        central_logger.agent_logger.info(f"Planner started for task: '{goal[:80]}'")
         prompt = self.get_prompt(goal, context)
         try:
             resp = await self.llm.generate([
                 {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ])
+            duration = time.time() - start_t
             if "NO_PLANNING_NEEDED" in resp:
+                central_logger.agent_logger.info(f"Planner finished in {duration:.2f}s: NO_PLANNING_NEEDED (conversational)")
                 return []
             steps = self._parse_steps(resp)
-            return steps if steps else [Step(id="1", description=goal)]
-        except Exception:
+            final_steps = steps if steps else [Step(id="1", description=goal)]
+            central_logger.log_plan_generated(len(final_steps), duration)
+            return final_steps
+        except Exception as e:
+            duration = time.time() - start_t
+            central_logger.agent_logger.error(f"Planner error after {duration:.2f}s: {e}")
             return []
 
     async def replan(self, failed_step: Step, error: str) -> list[Step]:
         if not self.llm:
             return []
+        start_t = time.time()
+        central_logger.agent_logger.info(f"Replanning for failed step '{failed_step.id}'")
         prompt = (
             f"Step '{failed_step.id}: {failed_step.description}' failed with error:\n{error}\n\n"
             "Suggest alternative steps to recover. Format: STEP_ID | DESCRIPTION | TOOL | ARGS_JSON"
@@ -198,8 +210,13 @@ class Planner:
                 {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ])
-            return self._parse_steps(resp)
-        except Exception:
+            duration = time.time() - start_t
+            new_steps = self._parse_steps(resp)
+            central_logger.agent_logger.info(f"Replanned {len(new_steps)} recovery steps in {duration:.2f}s")
+            return new_steps
+        except Exception as e:
+            duration = time.time() - start_t
+            central_logger.agent_logger.error(f"Replanning error after {duration:.2f}s: {e}")
             return []
 
     def _parse_steps(self, text: str) -> list[Step]:

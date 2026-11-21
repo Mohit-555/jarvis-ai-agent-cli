@@ -424,6 +424,9 @@ class JarvisCLI:
             else:
                 self._print_inline("🛡️ Normal Mode Enabled: Sensitive tools will ask for confirmation.", style="green")
 
+        elif verb == "/logs":
+            self._handle_logs_command(arg)
+
         elif verb == "/verbose":
             current_verbose = self.config.get("verbose", False)
             new_verbose = not current_verbose
@@ -479,6 +482,7 @@ class JarvisCLI:
             ("/mode [normal|power]", "Switch execution mode (normal / power ⚡)"),
             ("/power", "Toggle instant tool execution (no y/n prompts)"),
             ("/verbose", "Toggle clean vs detailed debug logs"),
+            ("/logs [channel]", "View request executions & component logs (llm, agent, tools, errors)"),
             ("/profile", "View or change user name & language"),
             ("/sessions", "List, load, view, or manage conversation sessions"),
             ("/theme", "Switch theme"),
@@ -500,6 +504,58 @@ class JarvisCLI:
             border_style="bright_black",
             box=box.ROUNDED,
         ))
+
+    def _handle_logs_command(self, arg: str):
+        from core.logger import central_logger
+        parts = arg.strip().split(maxsplit=1) if arg else []
+        subcmd = parts[0].lower() if parts else "summary"
+        param = parts[1] if len(parts) > 1 else ""
+
+        if subcmd in ("summary", "list", "requests"):
+            reqs = central_logger.get_recent_requests()
+            if not reqs:
+                self._print_inline("No requests logged yet in this session.", style="dim")
+                return
+
+            t = Table(box=box.SIMPLE, show_header=True, header_style="bold cyan")
+            t.add_column("Req ID", style="bold cyan", width=10)
+            t.add_column("Time", style="dim", width=10)
+            t.add_column("Duration", style="yellow", width=10)
+            t.add_column("Status", width=11)
+            t.add_column("Steps", justify="right", width=7)
+            t.add_column("Prompt / Goal", style="white")
+
+            for r in reqs:
+                st = r.get("status", "unknown")
+                st_style = "bold green" if st == "success" else "bold red" if st == "failed" else "bold yellow"
+                t.add_row(
+                    r.get("req_id", ""),
+                    r.get("start_time", ""),
+                    r.get("duration", ""),
+                    Text(st, style=st_style),
+                    str(r.get("steps", 0)),
+                    r.get("prompt", "")
+                )
+
+            console.print(Panel(t, title="[bold cyan]Execution Request History[/bold cyan]", border_style="bright_black", box=box.ROUNDED))
+            self._print_inline("Tip: /logs llm | /logs agent | /logs tools | /logs errors | /logs tail <channel>", style="dim")
+
+        elif subcmd in ("tail", "show", "view", "llm", "agent", "tools", "errors", "error", "jarvis"):
+            channel = param if subcmd in ("tail", "show", "view") else subcmd
+            if channel == "error":
+                channel = "errors"
+            channel = channel or "jarvis"
+
+            lines = central_logger.tail_log(channel, lines=25)
+            content = "\n".join(lines) if lines else "(empty log)"
+            console.print(Panel(
+                Text(content, style="white"),
+                title=f"[bold cyan]Log Tail: {channel}.log[/bold cyan]",
+                border_style="cyan",
+                box=box.ROUNDED
+            ))
+        else:
+            self._print_inline("Usage: /logs [summary | llm | agent | tools | errors | tail <channel>]", style=P["warn"])
 
     def _handle_sessions_command(self, arg: str):
         parts = arg.strip().split(maxsplit=1) if arg else []
@@ -734,9 +790,25 @@ class JarvisCLI:
         self._session.add_message("user", user_input)
         full = ""
         async for chunk in agent.execute_stream(user_input, self._session, config=self.config):
-            if agent._pending_ask:
+            if chunk.startswith("[ASK:"):
+                question = chunk[5:].rstrip("]\n")
+                if hasattr(self, "_active_status") and self._active_status:
+                    try: self._active_status.stop()
+                    except Exception: pass
+                answer = await self._ptk_session.prompt_async(HTML(f"<ansicyan><b>? </b></ansicyan>{html.escape(question)} "))
+                agent.submit_answer(answer)
+                if hasattr(self, "_active_status") and self._active_status:
+                    try: self._active_status.start()
+                    except Exception: pass
+            elif agent._pending_ask:
+                if hasattr(self, "_active_status") and self._active_status:
+                    try: self._active_status.stop()
+                    except Exception: pass
                 answer = await self._ptk_session.prompt_async(HTML(f"<ansicyan><b>? </b></ansicyan>{html.escape(agent._pending_ask)} "))
                 agent.submit_answer(answer)
+                if hasattr(self, "_active_status") and self._active_status:
+                    try: self._active_status.start()
+                    except Exception: pass
             else:
                 full += chunk
                 yield chunk
@@ -903,6 +975,7 @@ class JarvisCLI:
             full = ""
             status = console.status("[cyan]thinking…[/cyan]", spinner="dots")
             status.start()
+            self._active_status = status
             live = None
 
             def on_step(**kwargs):
@@ -914,8 +987,15 @@ class JarvisCLI:
                 except Exception:
                     pass
 
+            def on_ask(**kwargs):
+                try:
+                    status.stop()
+                except Exception:
+                    pass
+
             from core.event_bus import event_bus, EVENTS
             event_bus.on(EVENTS["AGENT_STEP"], on_step)
+            event_bus.on(EVENTS["AGENT_ASK"], on_ask)
 
             try:
                 async for chunk in self.chat_once(user_input):
@@ -940,6 +1020,7 @@ class JarvisCLI:
                     live = None
                 console.print(f"\n[red]Error: {e}[/red]")
             finally:
+                self._active_status = None
                 if status:
                     try: status.stop()
                     except Exception: pass
@@ -947,6 +1028,7 @@ class JarvisCLI:
                     try: live.stop()
                     except Exception: pass
                 event_bus.off(EVENTS["AGENT_STEP"], on_step)
+                event_bus.off(EVENTS["AGENT_ASK"], on_ask)
             console.print()
 
     def run_once(self, user_input: str) -> str:

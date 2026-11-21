@@ -35,26 +35,10 @@ class Daemon:
 
     def setup_logging(self):
         global logger
-        log_level = self.config.get('log_level', 'INFO')
-        log_file = LOGS_DIR / 'jarvis.log'
-
-        import logging
-        root = logging.getLogger()
-        root.setLevel(getattr(logging, log_level.upper(), logging.INFO))
-
-        fmt = logging.Formatter('%(asctime)s | %(levelname)-8s | %(name)s | %(message)s')
-
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(fmt)
-        root.addHandler(file_handler)
-
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(fmt)
-        console_handler.setLevel(logging.WARNING)
-        root.addHandler(console_handler)
-
-        logger = logging.getLogger('jarvis.daemon')
-        logger.info(f"Jarvis daemon starting. Log: {log_file}")
+        from core.logger import central_logger
+        self.logger = central_logger.jarvis_logger
+        logger = self.logger
+        logger.info(f"Jarvis daemon initialized with centralized execution logger. Log dir: {central_logger.log_dir}")
 
     def init_llm(self):
         from llm.router import LLMRouter

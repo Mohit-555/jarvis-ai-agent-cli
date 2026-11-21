@@ -8,6 +8,7 @@ from typing import AsyncGenerator, Optional
 from core.event_bus import event_bus, EVENTS
 from core.exceptions import AgentError, ToolExecutionError
 from core.session import Session
+from core.logger import central_logger
 from llm.router import LLMRouter
 
 from agent.planner import Planner, Step
@@ -101,13 +102,17 @@ class AgentExecutor:
         event_bus.emit(EVENTS["AGENT_START"], task=task, session_id=session.session_id if session else None)
         session_id = session.session_id if session else None
         context = self._get_context(session)
+        summary = central_logger.start_request(task)
 
         try:
             steps = await self.planner.plan(task, context)
             if not steps:
-                return await self._direct_llm(task)
+                res = await self._direct_llm(task)
+                summary.complete("success")
+                return res
         except Exception as e:
             event_bus.emit(EVENTS["AGENT_ERROR"], error=str(e), session_id=session_id)
+            summary.complete("failed", error=str(e))
             return await self._direct_llm(task)
 
         results = []
@@ -187,10 +192,12 @@ class AgentExecutor:
 
         session_id = session.session_id if session else None
         context = self._get_context(session)
+        summary = central_logger.start_request(task)
 
         if self._is_direct_chat(task):
             async for chunk in self._direct_llm_stream(task, session):
                 yield chunk
+            summary.complete("success")
             return
 
         try:
@@ -198,15 +205,19 @@ class AgentExecutor:
             if not steps:
                 async for chunk in self._direct_llm_stream(task, session):
                     yield chunk
+                summary.complete("success")
                 return
         except Exception as e:
+            central_logger.log_error(f"Execution planning error: {e}", exc_info=True)
             async for chunk in self._direct_llm_stream(task, session):
                 yield chunk
+            summary.complete("failed", error=str(e))
             return
 
         if all(s.tool == "" for s in steps):
             async for chunk in self._direct_llm_stream(task, session):
                 yield chunk
+            summary.complete("success")
             return
 
         is_verbose = config.get("verbose", False) if config else False
@@ -274,7 +285,9 @@ class AgentExecutor:
                     question = step.args.get("question", step.description)
                     self._pending_ask = question
                     self._ask_event.clear()
-                    yield ""
+                    event_bus.emit(EVENTS["AGENT_ASK"], question=question, step=step.id, session_id=session_id)
+                    central_logger.agent_logger.info(f"User interaction requested: '{question}'")
+                    yield f"[ASK:{question}]\n"
                     await self._ask_event.wait()
                     answer = self._ask_response
                     self._pending_ask = None
@@ -292,7 +305,8 @@ class AgentExecutor:
                             question = f"Do you want to run '{step.tool}' with arguments {step.args}? (y/n)"
                             self._pending_ask = question
                             self._ask_event.clear()
-                            yield ""
+                            event_bus.emit(EVENTS["AGENT_ASK"], question=question, step=step.id, session_id=session_id)
+                            yield f"[ASK:{question}]\n"
                             await self._ask_event.wait()
                             answer = (self._ask_response or "").strip().lower()
                             self._pending_ask = None

@@ -50,13 +50,14 @@ COMMANDS = [
     ("/mode",    "Switch execution mode (normal/power)"),
     ("/power",   "Toggle instant execution (no y/n)"),
     ("/verbose", "Toggle clean vs debug logs"),
+    ("/logs",    "View executions & logs (/logs [llm|agent|tools|errors])"),
     ("/profile", "User profile and preferences"),
     ("/sessions","Manage conversation sessions"),
     ("/theme",   "Switch theme (dark/light)"),
     ("/help",    "Show all commands"),
 ]
 
-COMMANDS_WITH_ARGS = {"/run", "/model", "/name", "/language"}
+COMMANDS_WITH_ARGS = {"/run", "/model", "/name", "/language", "/logs"}
 
 # ── Make Completion Menu Clickable ────────────────────────────────────────────
 

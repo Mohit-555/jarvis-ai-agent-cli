@@ -56,6 +56,7 @@ EVENTS = {
     'SESSION_DESTROYED': 'session:destroyed',
     'AGENT_START': 'agent:start',
     'AGENT_STEP': 'agent:step',
+    'AGENT_ASK': 'agent:ask',
     'AGENT_COMPLETE': 'agent:complete',
     'AGENT_ERROR': 'agent:error',
     'TOOL_CALL': 'tool:call',

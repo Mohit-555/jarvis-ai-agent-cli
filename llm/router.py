@@ -1,6 +1,9 @@
+import time
+import asyncio
 from typing import AsyncGenerator
 
 from core.exceptions import ProviderNotFound
+from core.logger import central_logger
 from llm.providers.base import BaseLLMProvider
 
 
@@ -38,18 +41,71 @@ class LLMRouter:
             self._providers[name] = provider_cls(self.config)
         return self._providers[name]
 
-    async def generate(self, messages: list[dict], provider: str = None, **kwargs) -> str:
-        p = self._get_provider(provider)
-        return await p.generate(messages, **kwargs)
+    async def generate(self, messages: list[dict], provider: str = None, timeout: float = 60.0, **kwargs) -> str:
+        provider_name = provider or self.config.get('llm_provider', 'ollama')
+        model_name = self.config.get(f'{provider_name}_model', 'default')
+        p = self._get_provider(provider_name)
+        
+        last_msg = messages[-1].get("content", "") if messages else ""
+        central_logger.log_llm_start(provider_name, model_name, str(last_msg))
+        start_t = time.time()
+        try:
+            res = await asyncio.wait_for(p.generate(messages, **kwargs), timeout=timeout)
+            duration = time.time() - start_t
+            central_logger.log_llm_end(provider_name, model_name, duration, success=True)
+            return res
+        except asyncio.TimeoutError:
+            duration = time.time() - start_t
+            err = f"LLM generation timed out after {timeout}s"
+            central_logger.log_llm_end(provider_name, model_name, duration, success=False, error=err)
+            raise TimeoutError(err)
+        except Exception as e:
+            duration = time.time() - start_t
+            central_logger.log_llm_end(provider_name, model_name, duration, success=False, error=str(e))
+            raise
 
     async def generate_stream(self, messages: list[dict], provider: str = None, **kwargs) -> AsyncGenerator[str, None]:
-        p = self._get_provider(provider)
-        async for token in p.generate_stream(messages, **kwargs):
-            yield token
+        provider_name = provider or self.config.get('llm_provider', 'ollama')
+        model_name = self.config.get(f'{provider_name}_model', 'default')
+        p = self._get_provider(provider_name)
+        
+        last_msg = messages[-1].get("content", "") if messages else ""
+        central_logger.log_llm_start(provider_name, model_name, str(last_msg))
+        start_t = time.time()
+        token_count = 0
+        try:
+            async for token in p.generate_stream(messages, **kwargs):
+                token_count += 1
+                yield token
+            duration = time.time() - start_t
+            central_logger.log_llm_end(provider_name, model_name, duration, success=True)
+        except Exception as e:
+            duration = time.time() - start_t
+            central_logger.log_llm_end(provider_name, model_name, duration, success=False, error=str(e))
+            raise
 
-    async def generate_with_tools(self, messages: list[dict], tools: list[dict], provider: str = None, **kwargs) -> dict:
-        p = self._get_provider(provider)
-        return await p.generate_with_tools(messages, tools, **kwargs)
+    async def generate_with_tools(self, messages: list[dict], tools: list[dict], provider: str = None, timeout: float = 60.0, **kwargs) -> dict:
+        provider_name = provider or self.config.get('llm_provider', 'ollama')
+        model_name = self.config.get(f'{provider_name}_model', 'default')
+        p = self._get_provider(provider_name)
+        
+        last_msg = messages[-1].get("content", "") if messages else ""
+        central_logger.log_llm_start(provider_name, model_name, f"[with_tools] {str(last_msg)}")
+        start_t = time.time()
+        try:
+            res = await asyncio.wait_for(p.generate_with_tools(messages, tools, **kwargs), timeout=timeout)
+            duration = time.time() - start_t
+            central_logger.log_llm_end(provider_name, model_name, duration, success=True)
+            return res
+        except asyncio.TimeoutError:
+            duration = time.time() - start_t
+            err = f"LLM generate_with_tools timed out after {timeout}s"
+            central_logger.log_llm_end(provider_name, model_name, duration, success=False, error=err)
+            raise TimeoutError(err)
+        except Exception as e:
+            duration = time.time() - start_t
+            central_logger.log_llm_end(provider_name, model_name, duration, success=False, error=str(e))
+            raise
 
     def close(self):
         import asyncio
