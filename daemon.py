@@ -1029,6 +1029,18 @@ class Daemon:
         except Exception as e:
             logger.debug(f"Plugin loader: {e}")
 
+    def init_wake_word(self):
+        if not self.config.get('enable_wake_word'):
+            return
+        try:
+            from voice.wake_word import WakeWordListener
+            listener = WakeWordListener(config=self.config)
+            listener.start()
+            self.services['wake_word'] = listener
+            logger.info("Wake word listener initialized (say 'Hello Jarvis' to open terminal)")
+        except Exception as e:
+            logger.warning(f"Wake word listener could not start: {e}")
+
     def start(self):
         self.setup_logging()
         logger.info("=" * 50)
@@ -1046,6 +1058,7 @@ class Daemon:
         self.init_api()
         self.init_scheduler()
         self.init_plugins()
+        self.init_wake_word()
 
         self.running = True
         logger.info("Jarvis daemon started successfully")

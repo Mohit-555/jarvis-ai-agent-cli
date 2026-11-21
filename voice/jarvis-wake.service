@@ -1,0 +1,15 @@
+[Unit]
+Description=Jarvis Voice Wake Word Auto-Launch Service
+After=network.target sound.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Desktop/my_project/Jarvis/jarvis_agent
+ExecStart=%h/Desktop/my_project/Jarvis/jarvis_agent/venv/bin/python -m voice.wake_word
+Restart=on-failure
+RestartSec=3
+Environment="DISPLAY=:0"
+Environment="XDG_CURRENT_DESKTOP=GNOME"
+
+[Install]
+WantedBy=default.target

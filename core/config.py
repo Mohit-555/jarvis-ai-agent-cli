@@ -30,7 +30,9 @@ except OSError:
 
 DEFAULT_CONFIG = {
     "assistant_name": "Jarvis",
-    "wake_word": "jarvis",
+    "wake_word": "hello jarvis",
+    "enable_wake_word": False,
+    "wake_word_model": "tiny",
     "hardware_adaptive": True,
     "hardware_profile": None,
     "device": "cpu",

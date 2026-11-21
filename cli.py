@@ -158,6 +158,14 @@ class JarvisCLI:
         )
 
         self._setup_keybindings()
+        self._wake_listener = None
+        if self.config.get("enable_wake_word", False):
+            try:
+                from voice.wake_word import WakeWordListener
+                self._wake_listener = WakeWordListener(config=self.config)
+                self._wake_listener.start()
+            except Exception:
+                pass
 
     # ── Setup ────────────────────────────────────────────────────────────────
 
@@ -465,6 +473,37 @@ class JarvisCLI:
             except Exception as e:
                 self._print_inline(f"Voice not available: {e}", style=P["error"])
 
+        elif verb == "/wake":
+            sub = (arg or "").strip().lower()
+            if sub in ("on", "start", "enable"):
+                self.config["enable_wake_word"] = True
+                save_config(self.config)
+                if not hasattr(self, "_wake_listener") or self._wake_listener is None:
+                    try:
+                        from voice.wake_word import WakeWordListener
+                        self._wake_listener = WakeWordListener(config=self.config)
+                        self._wake_listener.start()
+                    except Exception as e:
+                        self._print_inline(f"Could not start wake word listener: {e}", style=P["error"])
+                        return None
+                elif not self._wake_listener.is_alive():
+                    self._wake_listener.start()
+                self._print_inline("🎙️ Wake word active! Say 'Hello Jarvis' to focus or open terminal.", style=P["success"])
+
+            elif sub in ("off", "stop", "disable"):
+                self.config["enable_wake_word"] = False
+                save_config(self.config)
+                if hasattr(self, "_wake_listener") and self._wake_listener:
+                    self._wake_listener.stop()
+                    self._wake_listener = None
+                self._print_inline("🔇 Wake word listening disabled.", style=P["warn"])
+
+            else:
+                active = hasattr(self, "_wake_listener") and self._wake_listener and self._wake_listener.is_alive()
+                st = "[bold green]Active[/bold green]" if active else "[yellow]Inactive[/yellow]"
+                self._print_inline(f"Wake word status: {st} (Trigger: 'Hello Jarvis')", style="cyan")
+                self._print_inline("Usage: /wake on  |  /wake off  |  /wake status", style="dim")
+
         elif verb == "/help":
             self._print_help()
 
@@ -481,6 +520,7 @@ class JarvisCLI:
             ("/exit", "Exit Jarvis"),
             ("/reset", "Reset conversation"),
             ("/voice", "Voice input"),
+            ("/wake [on|off|status]", "Toggle 'Hello Jarvis' voice wake word"),
             ("/tools", "List available tools"),
             ("/skills", "List available skills"),
             ("/run <name> [args]", "Execute a skill"),
