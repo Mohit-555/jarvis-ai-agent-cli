@@ -135,6 +135,30 @@ tools:
   web_search:
     description: Search the web
     level: auto
+  whatsapp_send:
+    description: Send WhatsApp message
+    level: confirm
+  whatsapp_send_file:
+    description: Send document or media on WhatsApp
+    level: confirm
+  whatsapp_open_chat:
+    description: Open WhatsApp chat
+    level: auto
+  whatsapp_open:
+    description: Open WhatsApp Web
+    level: auto
+  whatsapp_check_unread:
+    description: Check unread WhatsApp messages
+    level: auto
+  whatsapp_read_unread:
+    description: Read unread WhatsApp messages
+    level: auto
+  whatsapp_read_chat:
+    description: Read specific WhatsApp chat
+    level: auto
+  whatsapp_search_contact:
+    description: Search WhatsApp contact or phone number
+    level: auto
   write_file:
     description: Write/modify files
     level: confirm

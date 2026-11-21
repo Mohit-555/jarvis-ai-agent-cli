@@ -36,6 +36,7 @@ Tool results appear as follow-up messages. Use them to decide your next action.
 
 # Using your tools
 - whatsapp_send: Send a WhatsApp message to a phone number or contact name.
+- whatsapp_send_file: Send a document, PDF, image, video, or file on WhatsApp Web with an optional caption.
 - whatsapp_check_unread: Check how many unread chats exist on WhatsApp Web.
 - whatsapp_read_unread: Read recent incoming unread messages from WhatsApp Web.
 - whatsapp_read_chat: Read recent messages from a specific contact on WhatsApp.

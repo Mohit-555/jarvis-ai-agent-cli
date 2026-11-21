@@ -29,6 +29,33 @@ SEND_BUTTON_SELECTORS = [
     'span[data-icon="wds-ic-send-filled"]',
 ]
 
+ATTACH_BUTTON_SELECTORS = [
+    'span[data-icon="plus"]',
+    'span[data-icon="attach-menu-plus"]',
+    'button[aria-label="Attach"]',
+    'button[title="Attach"]',
+    'div[title="Attach"]',
+    'span[data-icon="clip"]',
+]
+
+CAPTION_INPUT_SELECTORS = [
+    'div[contenteditable="true"][aria-label*="caption" i]',
+    'div[contenteditable="true"][data-tab="10"]',
+    'div[contenteditable="true"][aria-label="Type a message"]',
+    'footer div[contenteditable="true"]',
+    'div[contenteditable="true"]',
+]
+
+MEDIA_SEND_BUTTON_SELECTORS = [
+    'span[data-icon="send"]',
+    'button[aria-label="Send"]',
+    'div[aria-label="Send"]',
+    'span[data-icon="wds-ic-send-filled"]',
+]
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".3gp"}
+
 CHAT_ROW_SELECTORS = [
     '#pane-side div[role="row"]',
     'div[role="grid"] div[role="row"]',
@@ -293,6 +320,33 @@ class WhatsAppTool:
             )
         return f"No browser found. Reason: {result}"
 
+    def send_file(self, phone: str, file_path: str, caption: str = "") -> str:
+        """Send a document, PDF, image, video, or file to a phone number or contact on WhatsApp Web."""
+        phone_clean = phone.strip()
+        is_num = _is_phone_number(phone_clean)
+
+        if is_num:
+            number = _normalize_number(phone_clean)
+            if not number:
+                return "Invalid phone number provided."
+        else:
+            number = phone_clean
+
+        clean_path = os.path.abspath(os.path.expanduser(file_path.strip()))
+        if not os.path.exists(clean_path):
+            return f"File does not exist: {file_path}"
+        if not os.path.isfile(clean_path):
+            return f"Path is not a regular file: {file_path}"
+
+        result = [None]
+        def _run_send():
+            result[0] = self._send_file_playwright(number, clean_path, caption=caption, is_num=is_num)
+
+        t = threading.Thread(target=_run_send, daemon=True)
+        t.start()
+        t.join(timeout=180)
+        return result[0] or "Playwright file sending timed out."
+
     def open_chat(self, phone: str) -> str:
         phone_clean = phone.strip()
         is_num = _is_phone_number(phone_clean)
@@ -443,6 +497,102 @@ class WhatsAppTool:
                     return f"Sent WhatsApp message to {number}: \"{message}\""
                 except Exception as e:
                     return f"Typed the message but failed to send it: {e}"
+        except Exception as e:
+            return f"Playwright automation failed: {e}"
+
+    def _send_file_playwright(self, number: str, file_path: str, caption: str = "", is_num: bool = True) -> str:
+        try:
+            from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+        except ImportError:
+            return "Playwright not available"
+
+        try:
+            cdp_url = _ensure_brave_with_cdp()
+            if not cdp_url:
+                return "Could not start Brave with remote debugging."
+
+            with sync_playwright() as p:
+                browser = p.chromium.connect_over_cdp(cdp_url)
+                context = browser.contexts[0]
+
+                page = None
+                for existing in context.pages:
+                    if "web.whatsapp.com" in existing.url:
+                        page = existing
+                        break
+                if page is None:
+                    page = context.new_page()
+
+                page.bring_to_front()
+
+                if is_num:
+                    url = f"https://web.whatsapp.com/send?phone={number}"
+                    if not page.url.startswith("https://web.whatsapp.com/send?phone=" + number):
+                        page.goto(url, timeout=45000)
+                else:
+                    if "web.whatsapp.com" not in page.url:
+                        page.goto("https://web.whatsapp.com", timeout=45000)
+
+                load_err = _wait_for_wa_loaded(page, timeout=90000)
+                if load_err:
+                    return load_err
+
+                if not is_num:
+                    search_err = _open_chat_by_search(page, number)
+                    if search_err:
+                        return search_err
+
+                # Ensure chat window is active
+                _first_visible(page, MESSAGE_INPUT_SELECTORS, timeout=15000)
+
+                # Determine media vs document
+                ext = os.path.splitext(file_path)[1].lower()
+                is_media = ext in IMAGE_EXTENSIONS or ext in VIDEO_EXTENSIONS
+
+                # File input selector
+                target_selector = 'input[accept*="image"], input[accept*="video"]' if is_media else 'input[accept="*"], input[type="file"]:not([accept*="image"])'
+
+                file_input = page.query_selector(target_selector) or page.query_selector('input[type="file"]')
+                if not file_input:
+                    # Click attach button to reveal file inputs
+                    attach_btn = _first_visible(page, ATTACH_BUTTON_SELECTORS, timeout=5000)
+                    if attach_btn:
+                        attach_btn.click()
+                        page.wait_for_timeout(600)
+                        file_input = page.query_selector(target_selector) or page.query_selector('input[type="file"]')
+
+                if not file_input:
+                    return f"Could not find file attachment input on WhatsApp Web (extension: {ext})."
+
+                try:
+                    file_input.set_input_files(file_path)
+                    page.wait_for_timeout(1500)
+                except Exception as e:
+                    return f"Failed to upload file to WhatsApp Web: {e}"
+
+                # Handle optional caption
+                if caption:
+                    caption_box = _first_visible(page, CAPTION_INPUT_SELECTORS, timeout=10000)
+                    if caption_box:
+                        try:
+                            caption_box.click()
+                            caption_box.type(caption, delay=10)
+                            page.wait_for_timeout(300)
+                        except Exception:
+                            pass
+
+                # Send file
+                send_btn = _first_visible(page, MEDIA_SEND_BUTTON_SELECTORS, timeout=8000)
+                try:
+                    if send_btn:
+                        send_btn.click()
+                    else:
+                        page.keyboard.press("Enter")
+                    page.wait_for_timeout(3000)
+                    base_name = os.path.basename(file_path)
+                    return f"Sent file '{base_name}' to {number}" + (f" with caption: \"{caption}\"" if caption else "")
+                except Exception as e:
+                    return f"File was uploaded to preview, but failed to press send: {e}"
         except Exception as e:
             return f"Playwright automation failed: {e}"
 

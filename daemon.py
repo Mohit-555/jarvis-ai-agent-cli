@@ -298,6 +298,23 @@ class Daemon:
                 },
             })
             tool_defs.append({
+                'name': 'whatsapp_send_file',
+                'description': (
+                    'Send a document, PDF, image, video, or any file to a phone number or contact on WhatsApp Web, '
+                    'with an optional caption.'
+                ),
+                'handler': functools.partial(WhatsAppTool.send_file, _wa),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'phone':     {'type': 'string', 'description': 'Phone number with country code (e.g. +919315878702) or contact name'},
+                        'file_path': {'type': 'string', 'description': 'Absolute or relative path to the file/image/document/pdf to send'},
+                        'caption':   {'type': 'string', 'description': 'Optional caption or message text to accompany the file'},
+                    },
+                    'required': ['phone', 'file_path'],
+                },
+            })
+            tool_defs.append({
                 'name': 'whatsapp_open_chat',
                 'description': 'Open a WhatsApp chat with a phone number in the browser (without sending a message)',
                 'handler': functools.partial(WhatsAppTool.open_chat, _wa),
