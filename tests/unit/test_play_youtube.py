@@ -34,6 +34,13 @@ class TestPlayYouTube(unittest.TestCase):
         self.tool.play_youtube("gana chalao Raabta")
         mock_watch.assert_called_with("Raabta")
 
+    @patch.object(SystemTool, "media_control")
+    @patch.object(SystemTool, "_get_youtube_watch_url", return_value="https://www.youtube.com/watch?v=TESTID&autoplay=1")
+    @patch.object(SystemTool, "browse_url", return_value="Navigated")
+    def test_play_youtube_pauses_existing_playback(self, mock_browse, mock_watch, mock_control):
+        self.tool.play_youtube("Tum Hi Ho")
+        mock_control.assert_called_with("pause")
+
     @patch("shutil.which")
     @patch("subprocess.Popen")
     @patch.object(SystemTool, "_focus_browser_window")

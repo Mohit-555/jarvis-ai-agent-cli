@@ -240,6 +240,12 @@ class SystemTool:
 
     def play_youtube(self, query: str) -> str:
         """Search and play a song/video directly on YouTube in the current browser window."""
+        # 1. Pause any currently playing media so both songs never play at the same time
+        try:
+            self.media_control("pause")
+        except Exception:
+            pass
+
         clean_q = query.strip()
         for prefix in ("play ", "song ", "gana ", "chalao "):
             if clean_q.lower().startswith(prefix):

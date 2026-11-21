@@ -141,6 +141,24 @@ class TestMediaTool(unittest.TestCase):
         self.assertIn("play_pause", res)
         self.assertIn("successfully", res)
 
+    @patch("shutil.which", return_value="/usr/bin/playerctl")
+    @patch("subprocess.run")
+    def test_media_control_pause_all_players(self, mock_run, mock_which):
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_run.return_value = mock_res
+
+        res = self.tool.media_control("pause")
+        self.assertIn("pause", res)
+        self.assertIn("all players", res)
+        mock_run.assert_called_with(
+            ["playerctl", "-a", "pause"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            env=self.tool._get_dbus_env()
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

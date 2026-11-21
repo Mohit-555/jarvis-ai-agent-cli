@@ -83,16 +83,11 @@ class MediaTool:
             pass
         return None
 
-    def _query_mpris_dbus(self, target_player: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Query MPRIS2 media players via gdbus or dbus-send."""
+    def _list_mpris_players(self, target_player: Optional[str] = None) -> List[str]:
+        """List active DBus MediaPlayer2 names."""
         env = self._get_dbus_env()
         has_gdbus = bool(shutil.which("gdbus"))
         has_dbus_send = bool(shutil.which("dbus-send"))
-
-        if not has_gdbus and not has_dbus_send:
-            return None
-
-        # 1. List active DBus names
         player_names = []
         try:
             if has_gdbus:
@@ -113,15 +108,25 @@ class MediaTool:
         except Exception:
             pass
 
-        if not player_names:
-            return None
-
-        # Filter by target_player if requested
-        if target_player:
+        if target_player and player_names:
             t_lower = target_player.lower()
             filtered = [p for p in player_names if t_lower in p.lower()]
             if filtered:
-                player_names = filtered
+                return filtered
+        return player_names
+
+    def _query_mpris_dbus(self, target_player: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Query MPRIS2 media players via gdbus or dbus-send."""
+        env = self._get_dbus_env()
+        has_gdbus = bool(shutil.which("gdbus"))
+        has_dbus_send = bool(shutil.which("dbus-send"))
+
+        if not has_gdbus and not has_dbus_send:
+            return None
+
+        player_names = self._list_mpris_players(target_player)
+        if not player_names:
+            return None
 
         # 2. Inspect players for status and metadata (prioritizing actively Playing tracks)
         playing_candidates = []
@@ -299,23 +304,28 @@ class MediaTool:
         act = action.lower().replace("-", "_").strip()
         env = self._get_dbus_env()
 
-        # Try playerctl first
+        # Try playerctl first (pause/stop with -a to affect all active players)
         if shutil.which("playerctl"):
-            cmd_map = {
-                "play_pause": ["playerctl", "play-pause"],
-                "play": ["playerctl", "play"],
-                "pause": ["playerctl", "pause"],
-                "next": ["playerctl", "next"],
-                "previous": ["playerctl", "previous"],
-                "stop": ["playerctl", "stop"],
-            }
-            if act in cmd_map:
+            if act in ("pause", "stop"):
                 try:
-                    res = subprocess.run(cmd_map[act], capture_output=True, text=True, timeout=3, env=env)
-                    if res.returncode == 0:
-                        return f"Media command '{act}' executed successfully."
+                    subprocess.run(["playerctl", "-a", act], capture_output=True, text=True, timeout=3, env=env)
+                    return f"Media command '{act}' executed successfully on all players."
                 except Exception:
                     pass
+            else:
+                cmd_map = {
+                    "play_pause": ["playerctl", "play-pause"],
+                    "play": ["playerctl", "play"],
+                    "next": ["playerctl", "next"],
+                    "previous": ["playerctl", "previous"],
+                }
+                if act in cmd_map:
+                    try:
+                        res = subprocess.run(cmd_map[act], capture_output=True, text=True, timeout=3, env=env)
+                        if res.returncode == 0:
+                            return f"Media command '{act}' executed successfully."
+                    except Exception:
+                        pass
 
         # Try MPRIS via gdbus
         if shutil.which("gdbus"):
@@ -328,17 +338,28 @@ class MediaTool:
                 "stop": "Stop",
             }.get(act, "PlayPause")
 
-            # Find player destination
-            info = self._query_mpris_dbus()
-            if info and info.get("raw_dest"):
-                dest = info["raw_dest"]
-                try:
-                    cmd = ["gdbus", "call", "--session", "--dest", dest,
-                           "--object-path", "/org/mpris/MediaPlayer2",
-                           "--method", f"org.mpris.MediaPlayer2.Player.{mpris_method}"]
-                    subprocess.run(cmd, capture_output=True, text=True, timeout=3, env=env)
-                    return f"Media playback '{act}' sent to {dest}."
-                except Exception as e:
-                    return f"Failed to execute media control: {e}"
+            players = self._list_mpris_players()
+            if players:
+                # If pausing or stopping, send to all players to prevent double playback
+                if act in ("pause", "stop"):
+                    for dest in players:
+                        try:
+                            cmd = ["gdbus", "call", "--session", "--dest", dest,
+                                   "--object-path", "/org/mpris/MediaPlayer2",
+                                   "--method", "org.mpris.MediaPlayer2.Player.Pause"]
+                            subprocess.run(cmd, capture_output=True, text=True, timeout=2, env=env)
+                        except Exception:
+                            pass
+                    return f"Media playback '{act}' sent to all players."
+                else:
+                    dest = players[0]
+                    try:
+                        cmd = ["gdbus", "call", "--session", "--dest", dest,
+                               "--object-path", "/org/mpris/MediaPlayer2",
+                               "--method", f"org.mpris.MediaPlayer2.Player.{mpris_method}"]
+                        subprocess.run(cmd, capture_output=True, text=True, timeout=3, env=env)
+                        return f"Media playback '{act}' sent to {dest}."
+                    except Exception as e:
+                        return f"Failed to execute media control: {e}"
 
         return f"Could not execute media action '{action}'. No controllable player active."
