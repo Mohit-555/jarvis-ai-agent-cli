@@ -230,6 +230,104 @@ class Daemon:
             pass
 
         try:
+            from tools.data.db_tool import DatabaseTool
+            _db_inst = DatabaseTool()
+            tool_defs.append({
+                'name': 'db_query',
+                'description': 'Execute SQL query on SQLite, MySQL, or PostgreSQL database and return result rows or status',
+                'handler': functools.partial(DatabaseTool.query, _db_inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {'type': 'string', 'description': 'SQL query to execute'},
+                        'db_type': {'type': 'string', 'description': 'Database type: sqlite, mysql, or postgres (default: sqlite)'},
+                        'db_name': {'type': 'string', 'description': 'Database file path for SQLite or database name for MySQL/Postgres'},
+                        'host': {'type': 'string', 'description': 'Host for MySQL/Postgres (default: localhost)'},
+                        'port': {'type': 'integer', 'description': 'Port for MySQL/Postgres'},
+                        'user': {'type': 'string', 'description': 'Database user'},
+                        'password': {'type': 'string', 'description': 'Database password'},
+                    },
+                    'required': ['query'],
+                },
+            })
+            tool_defs.append({
+                'name': 'db_list_tables',
+                'description': 'List all tables in a SQLite, MySQL, or PostgreSQL database',
+                'handler': functools.partial(DatabaseTool.list_tables, _db_inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'db_type': {'type': 'string', 'description': 'Database type: sqlite, mysql, or postgres'},
+                        'db_name': {'type': 'string', 'description': 'Database name or path'},
+                    },
+                },
+            })
+            tool_defs.append({
+                'name': 'db_export_csv',
+                'description': 'Execute a SQL query and export result rows directly to a CSV file',
+                'handler': functools.partial(DatabaseTool.export_csv, _db_inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {'type': 'string', 'description': 'SQL query to export'},
+                        'output_path': {'type': 'string', 'description': 'Destination CSV file path'},
+                        'db_type': {'type': 'string', 'description': 'Database type: sqlite, mysql, or postgres'},
+                        'db_name': {'type': 'string', 'description': 'Database name or path'},
+                    },
+                    'required': ['query', 'output_path'],
+                },
+            })
+        except Exception:
+            pass
+
+        try:
+            from tools.office.document_tool import DocumentTool
+            _doc_inst = DocumentTool()
+            tool_defs.append({
+                'name': 'doc_read',
+                'description': 'Read and extract text from Word (.docx), PDF (.pdf), Excel (.xlsx), or CSV files',
+                'handler': functools.partial(DocumentTool.read, _doc_inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'file_path': {'type': 'string', 'description': 'Path to the document file'},
+                    },
+                    'required': ['file_path'],
+                },
+            })
+            tool_defs.append({
+                'name': 'doc_generate',
+                'description': 'Generate a professional Word (.docx), Excel (.xlsx), PDF (.pdf), or PowerPoint (.pptx) document',
+                'handler': functools.partial(DocumentTool.generate, _doc_inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'doc_type': {'type': 'string', 'description': 'Document type: docx, xlsx, pdf, or pptx'},
+                        'output_path': {'type': 'string', 'description': 'Destination file path'},
+                        'title': {'type': 'string', 'description': 'Document title or presentation topic'},
+                        'content': {'type': 'string', 'description': 'Document body text or slide contents'},
+                        'table_data': {'type': 'array', 'description': 'Optional 2D array of table rows [[col1, col2], [val1, val2]]'},
+                    },
+                    'required': ['doc_type', 'output_path'],
+                },
+            })
+            tool_defs.append({
+                'name': 'doc_convert',
+                'description': 'Convert documents between formats (CSV to Excel, Excel to CSV, Text/Markdown to PDF or Word)',
+                'handler': functools.partial(DocumentTool.convert, _doc_inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'src_path': {'type': 'string', 'description': 'Source file path'},
+                        'dest_path': {'type': 'string', 'description': 'Destination file path'},
+                    },
+                    'required': ['src_path', 'dest_path'],
+                },
+            })
+        except Exception:
+            pass
+
+        try:
             from tools.system.monitor import SystemMonitor
             _inst = SystemMonitor()
             tool_defs.append({

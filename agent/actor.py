@@ -27,6 +27,12 @@ TOOL_ALIASES = {
     "project_scan": "scan_project",
     "project_scanner": "scan_project",
     "scan_codebase": "scan_project",
+    "sql_query": "db_query",
+    "database_query": "db_query",
+    "list_tables": "db_list_tables",
+    "generate_doc": "doc_generate",
+    "read_doc": "doc_read",
+    "convert_doc": "doc_convert",
 }
 
 

@@ -36,6 +36,8 @@ Tool results appear as follow-up messages. Use them to decide your next action.
 
 # Using your tools
 - scan_project: Intelligently and securely scan a project directory to discover its architecture, entry points (.py, main.py, app.py), dependencies (requirements.txt, pyproject.toml), and file tree while ignoring sensitive dotfiles, browser profiles, and caches.
+- db_query / db_list_tables / db_export_csv: Execute SQL queries, list tables, and export data to CSV across SQLite, MySQL, and PostgreSQL.
+- doc_read / doc_generate / doc_convert: Read, generate, and convert Word (.docx), Excel (.xlsx), PDF (.pdf), PowerPoint (.pptx), and CSV files.
 - whatsapp_send: Send a WhatsApp message to a phone number or contact name.
 - whatsapp_send_file: Send a document, PDF, image, video, or file on WhatsApp Web with an optional caption.
 - whatsapp_check_unread: Check how many unread chats exist on WhatsApp Web.
@@ -214,7 +216,7 @@ class AgentExecutor:
             yield f"Created {len(steps)} steps\n"
         results = []
 
-        READ_ONLY_TOOLS = {"read_file", "web_search", "web_fetch", "list_directory", "scan_project", "system_info", "clipboard_read", "process_list", "open_app", "screenshot"}
+        READ_ONLY_TOOLS = {"read_file", "web_search", "web_fetch", "list_directory", "scan_project", "db_query", "db_list_tables", "doc_read", "system_info", "clipboard_read", "process_list", "open_app", "screenshot"}
 
         for iteration in range(self.max_iterations):
             remaining = [s for s in steps if s.status == "pending"]

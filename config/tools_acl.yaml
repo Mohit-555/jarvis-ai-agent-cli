@@ -111,6 +111,24 @@ tools:
   scan_project:
     description: Intelligently and securely scan project structure
     level: auto
+  db_query:
+    description: Execute database SQL queries
+    level: auto
+  db_list_tables:
+    description: List tables in database
+    level: auto
+  db_export_csv:
+    description: Export database records to CSV
+    level: auto
+  doc_read:
+    description: Read content from Word, PDF, Excel, or CSV
+    level: auto
+  doc_generate:
+    description: Generate Word, Excel, PDF, or PowerPoint documents
+    level: auto
+  doc_convert:
+    description: Convert documents between formats
+    level: auto
   process_kill:
     description: Kill processes
     level: confirm
