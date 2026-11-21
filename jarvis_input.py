@@ -26,7 +26,7 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.history import InMemoryHistory
-from prompt_toolkit.filters import Condition
+from prompt_toolkit.filters import Condition, has_completions
 from prompt_toolkit.application import get_app
 from prompt_toolkit.mouse_events import MouseEvent, MouseEventType
 from prompt_toolkit.layout.menus import CompletionsMenuControl, MultiColumnCompletionMenuControl
@@ -230,7 +230,7 @@ class JarvisInput:
             key_bindings     = _make_bindings(),
             bottom_toolbar   = self._toolbar,
             complete_in_thread = True,
-            mouse_support    = True,        # enables clickable completion options and mouse scrolling
+            mouse_support    = has_completions,  # Only intercept mouse when completion menu is open; keeps native mousepad scrolling everywhere else
             wrap_lines       = True,
         )
 

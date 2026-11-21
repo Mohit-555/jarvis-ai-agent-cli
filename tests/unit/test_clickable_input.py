@@ -33,7 +33,9 @@ class TestClickableInput(unittest.TestCase):
     def test_mouse_click_selection(self):
         async def _run():
             inp = JarvisInput(config={"llm_provider": "gemini", "gemini_model": "gemini-3.5-flash-lite"})
-            self.assertTrue(inp._session.mouse_support)
+            self.assertTrue(callable(inp._session.mouse_support))
+            # Initially no completions -> mouse_support is False so mousepad scrolls terminal
+            self.assertFalse(inp._session.mouse_support())
 
             completer = SlashCompleter()
             doc = Document("/")
