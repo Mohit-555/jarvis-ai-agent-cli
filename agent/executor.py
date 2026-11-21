@@ -35,6 +35,7 @@ Tool results appear as follow-up messages. Use them to decide your next action.
 - Prioritize writing safe, correct code. Avoid introducing security vulnerabilities.
 
 # Using your tools
+- scan_project: Intelligently and securely scan a project directory to discover its architecture, entry points (.py, main.py, app.py), dependencies (requirements.txt, pyproject.toml), and file tree while ignoring sensitive dotfiles, browser profiles, and caches.
 - whatsapp_send: Send a WhatsApp message to a phone number or contact name.
 - whatsapp_send_file: Send a document, PDF, image, video, or file on WhatsApp Web with an optional caption.
 - whatsapp_check_unread: Check how many unread chats exist on WhatsApp Web.
@@ -213,7 +214,7 @@ class AgentExecutor:
             yield f"Created {len(steps)} steps\n"
         results = []
 
-        READ_ONLY_TOOLS = {"read_file", "web_search", "web_fetch", "list_directory", "system_info", "clipboard_read", "process_list", "open_app", "screenshot"}
+        READ_ONLY_TOOLS = {"read_file", "web_search", "web_fetch", "list_directory", "scan_project", "system_info", "clipboard_read", "process_list", "open_app", "screenshot"}
 
         for iteration in range(self.max_iterations):
             remaining = [s for s in steps if s.status == "pending"]
@@ -470,11 +471,16 @@ class AgentExecutor:
         cwd = os.getcwd()
         home = os.path.expanduser("~")
         jarvis_home = os.path.expanduser("~/.jarvis")
-        prompt += f"\n\n# System Environment & Paths\n"
+        prompt += f"\n\n# System Environment & Workspace Guidelines\n"
         prompt += f"- Current Working Directory: {cwd}\n"
         prompt += f"- User Home Directory: {home}\n"
-        prompt += f"- Jarvis User Data Directory: {jarvis_home}\n"
-        prompt += f"- Note: When the user asks about the Jarvis folder, project, or files, it refers to the Current Working Directory ({cwd}) or Jarvis User Data Directory ({jarvis_home}).\n"
+        prompt += f"- Jarvis Internal User Data Directory: {jarvis_home} (stores internal Jarvis logs, configs, databases, and session profiles). NEVER treat this directory or Jarvis agent source files as the user's application project!\n"
+        prompt += "\n# AI Coding Agent Behavior & Protocol\n"
+        prompt += "- Purpose Explanation: Whenever you need to inspect files or directories, ALWAYS explain the exact purpose before taking action (e.g. 'I am inspecting your project structure to understand existing modules and locate the optimal place for your function').\n"
+        prompt += "- Workspace vs Jarvis Distinction: If the user asks you to write code, modify code, or inspect their project, and the current working directory is Jarvis's own internal repository or runtime folder and NOT their target application, explicitly inform them:\n"
+        prompt += "  'I've located your Jarvis directory. However, I haven't identified your actual application source code yet. Please provide the project directory or select a project from your workspace. I'll inspect its Python files, understand the existing architecture, and identify the best location to add your requested function. I won't modify any files without your confirmation.'\n"
+        prompt += "- Intelligent File Scanning: Use `scan_project` to inspect codebases. Prioritize high-signal files: .py, main.py, app.py, config.py, requirements.txt, pyproject.toml, and project source folders. Strictly avoid mentioning or scanning .bashrc, shell configs, browser profiles, API keys, session data, or credentials.\n"
+        prompt += "- Safety & Confirmation Protocol: First inspect architecture and identify the best design/location. Never modify, overwrite, or delete project files without explicit confirmation from the user.\n"
 
         user_name = self.config.get("user_name") if self.config else None
         user_lang = self.config.get("user_language") if self.config else None

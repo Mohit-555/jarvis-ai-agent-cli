@@ -24,6 +24,9 @@ TOOL_ALIASES = {
     # NOTE: "open_app" is the actual registered tool name — do NOT alias it
     "app_launch": "open_app",      # alias the old name TO the real name
     "screenshot": "screen_capture",
+    "project_scan": "scan_project",
+    "project_scanner": "scan_project",
+    "scan_codebase": "scan_project",
 }
 
 

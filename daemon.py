@@ -212,6 +212,20 @@ class Daemon:
                     'properties': {'path': {'type': 'string', 'description': 'Directory path'}},
                 },
             })
+            from tools.code.project_scanner import ProjectScannerTool
+            _scanner = ProjectScannerTool()
+            tool_defs.append({
+                'name': 'scan_project',
+                'description': 'Intelligently and securely scan a project directory to discover its architecture, entry points, dependencies, and structure without exposing sensitive files',
+                'handler': functools.partial(ProjectScannerTool.scan, _scanner),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'path': {'type': 'string', 'description': 'Target directory path to scan (defaults to current directory)'},
+                        'depth': {'type': 'integer', 'description': 'Maximum directory depth to scan (default 3)'},
+                    },
+                },
+            })
         except Exception:
             pass
 

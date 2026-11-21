@@ -108,6 +108,9 @@ tools:
   list_directory:
     description: List directory contents
     level: auto
+  scan_project:
+    description: Intelligently and securely scan project structure
+    level: auto
   process_kill:
     description: Kill processes
     level: confirm
