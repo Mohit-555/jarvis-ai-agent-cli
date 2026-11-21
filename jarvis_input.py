@@ -16,17 +16,20 @@ Usage in cli.py:
 """
 
 import asyncio
+import html
 import shutil
 from typing import Optional
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.formatted_text import HTML, AnyFormattedText
+from prompt_toolkit.formatted_text import HTML, AnyFormattedText, FormattedText
 from prompt_toolkit.styles import Style
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.application import get_app
+from prompt_toolkit.mouse_events import MouseEvent, MouseEventType
+from prompt_toolkit.layout.menus import CompletionsMenuControl, MultiColumnCompletionMenuControl
 from rich.console import Console
 from rich.text import Text
 
@@ -40,16 +43,74 @@ COMMANDS = [
     ("/voice",   "Voice input"),
     ("/tools",   "List available tools"),
     ("/skills",  "List available skills"),
-    ("/run",     "Execute a skill"),
+    ("/run",     "Execute a skill (/run <name>)"),
     ("/memory",  "Search memories"),
     ("/status",  "System status"),
     ("/model",   "Switch LLM model"),
     ("/mode",    "Switch execution mode (normal/power)"),
     ("/power",   "Toggle instant execution (no y/n)"),
     ("/verbose", "Toggle clean vs debug logs"),
-    ("/theme",   "Switch theme"),
-    ("/help",    "Show help"),
+    ("/profile", "User profile and preferences"),
+    ("/sessions","Manage conversation sessions"),
+    ("/theme",   "Switch theme (dark/light)"),
+    ("/help",    "Show all commands"),
 ]
+
+COMMANDS_WITH_ARGS = {"/run", "/model", "/name", "/language"}
+
+# ── Make Completion Menu Clickable ────────────────────────────────────────────
+
+def _apply_and_execute_completion(b, cmd_text: str):
+    """Handle mouse click selection of a command."""
+    b.complete_state = None
+    if any(cmd_text == c or cmd_text.startswith(c + " ") for c in COMMANDS_WITH_ARGS):
+        if not b.text.endswith(" "):
+            b.insert_text(" ")
+    else:
+        # Self-contained command: execute immediately
+        try:
+            app = get_app()
+            if app.is_running:
+                b.validate_and_handle()
+        except Exception:
+            pass
+
+
+_orig_single_mouse = CompletionsMenuControl.mouse_handler
+
+def _custom_single_mouse(self, mouse_event: MouseEvent):
+    b = get_app().current_buffer
+    if mouse_event.event_type == MouseEventType.MOUSE_UP:
+        if b.complete_state and b.complete_state.completions:
+            idx = mouse_event.position.y
+            completions = b.complete_state.completions
+            if 0 <= idx < len(completions):
+                comp = completions[idx]
+                cmd_text = comp.text
+                b.go_to_completion(idx)
+                _apply_and_execute_completion(b, cmd_text)
+                return None
+    return _orig_single_mouse(self, mouse_event)
+
+CompletionsMenuControl.mouse_handler = _custom_single_mouse
+
+
+_orig_multi_mouse = MultiColumnCompletionMenuControl.mouse_handler
+
+def _custom_multi_mouse(self, mouse_event: MouseEvent):
+    b = get_app().current_buffer
+    if mouse_event.event_type == MouseEventType.MOUSE_UP:
+        x, y = mouse_event.position.x, mouse_event.position.y
+        if hasattr(self, "_render_pos_to_completion"):
+            completion = self._render_pos_to_completion.get((x, y))
+            if completion:
+                cmd_text = completion.text
+                b.apply_completion(completion)
+                _apply_and_execute_completion(b, cmd_text)
+                return None
+    return _orig_multi_mouse(self, mouse_event)
+
+MultiColumnCompletionMenuControl.mouse_handler = _custom_multi_mouse
 
 # ── Slash completer ───────────────────────────────────────────────────────────
 
@@ -65,13 +126,14 @@ class SlashCompleter(Completer):
 
         for cmd, desc in COMMANDS:
             if cmd.startswith(text):
+                safe_desc = html.escape(desc)
                 # How many chars to replace
                 yield Completion(
                     cmd,
                     start_position=-len(text),
                     display=HTML(
                         f"<cyan>{cmd:<12}</cyan>  "
-                        f"<ansigray>{desc}</ansigray>"
+                        f"<ansigray>{safe_desc}</ansigray>"
                     ),
                 )
 
@@ -115,7 +177,17 @@ def _make_toolbar(provider: str, model: str, turns: int):
 # ── Prompt string (left-bar accent like OpenCode) ─────────────────────────────
 
 def _prompt_str() -> AnyFormattedText:
-    return HTML("<ansicyan><b>›  </b></ansicyan>")
+    def _on_prompt_click(mouse_event: MouseEvent):
+        if mouse_event.event_type == MouseEventType.MOUSE_UP:
+            try:
+                b = get_app().current_buffer
+                if not b.text:
+                    b.insert_text("/")
+                b.start_completion(select_first=False)
+            except Exception:
+                pass
+
+    return FormattedText([("class:prompt", "›  ", _on_prompt_click)])
 
 # ── Key bindings ──────────────────────────────────────────────────────────────
 
@@ -158,7 +230,7 @@ class JarvisInput:
             key_bindings     = _make_bindings(),
             bottom_toolbar   = self._toolbar,
             complete_in_thread = True,
-            mouse_support    = False,        # keep it keyboard-driven
+            mouse_support    = True,        # enables clickable completion options and mouse scrolling
             wrap_lines       = True,
         )
 
@@ -168,14 +240,27 @@ class JarvisInput:
         provider = self.config.get("llm_provider", "ollama")
         key      = f"{provider}_model"
         model    = self.config.get(key, "")
-        return HTML(
-            f" <ansicyan>{provider}</ansicyan>"
-            f"<ansigray> · </ansigray>"
-            f"<ansicyan>{model}</ansicyan>"
-            f"<ansigray> · </ansigray>"
-            f"<ansigray>{self._turns} turns</ansigray>"
-            f"    <b>ctrl+p</b> commands"
-        )
+
+        def _on_commands_click(mouse_event: MouseEvent):
+            if mouse_event.event_type == MouseEventType.MOUSE_UP:
+                try:
+                    b = get_app().current_buffer
+                    if not b.text.startswith("/"):
+                        b.text = "/"
+                        b.cursor_position = 1
+                    b.start_completion(select_first=False)
+                except Exception:
+                    pass
+
+        return FormattedText([
+            ("class:ansicyan", f" {provider}"),
+            ("class:ansigray", " · "),
+            ("class:ansicyan", f"{model}"),
+            ("class:ansigray", " · "),
+            ("class:ansigray", f"{self._turns} turns"),
+            ("class:ansigray", "    "),
+            ("class:ansicyan", "ctrl+p commands", _on_commands_click),
+        ])
 
     # ── Public API ────────────────────────────────────────────────────────────
 
