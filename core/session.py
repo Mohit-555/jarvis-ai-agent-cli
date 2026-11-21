@@ -86,11 +86,11 @@ class Session:
 
 
 class SessionManager:
-    def __init__(self, ttl_seconds: int = 1800):
+    def __init__(self, ttl_seconds: int = 1800, storage_dir=None):
         self._sessions: dict[str, Session] = {}
         self._lock = threading.Lock()
         self._ttl = ttl_seconds
-        self._storage_dir: Path = SESSIONS_DIR
+        self._storage_dir: Path = Path(storage_dir).resolve() if storage_dir else SESSIONS_DIR
 
     def _ensure_dir(self):
         try:

@@ -29,6 +29,7 @@ class Test180CapabilitiesMatrix(unittest.TestCase):
             "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);",
             db_type="sqlite",
             db_name=db_file,
+            confirm=True,
         )
         self.assertTrue(create_res["success"], f"Create table failed: {create_res}")
 
@@ -37,6 +38,7 @@ class Test180CapabilitiesMatrix(unittest.TestCase):
             "INSERT INTO users (name, email) VALUES ('Mohit', 'mohit@example.com'), ('Alice', 'alice@example.com');",
             db_type="sqlite",
             db_name=db_file,
+            confirm=True,
         )
         self.assertTrue(ins_res["success"])
         self.assertEqual(ins_res["affected_rows"], 2)

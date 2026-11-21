@@ -64,7 +64,7 @@ class Actor:
                 return fn
         return None
 
-    def execute_step(self, step, tool_registry=None) -> ToolResult:
+    def execute_step(self, step, tool_registry=None, timeout: int = 35) -> ToolResult:
         registry = tool_registry or self._registry
         tool_name = step.tool
         if not tool_name:
@@ -78,20 +78,35 @@ class Actor:
             )
         try:
             import inspect
-            if isinstance(step.args, dict) and step.args:
+            final_args = dict(step.args) if isinstance(step.args, dict) else step.args
+            if isinstance(final_args, dict):
                 try:
                     sig = inspect.signature(fn)
-                    params = list(sig.parameters.keys())
-                    if params and params[0] == "self":
-                        params = params[1:]
-                    if len(step.args) == 1 and params:
-                        passed_key = list(step.args.keys())[0]
-                        if passed_key not in params:
-                            step.args = {params[0]: step.args[passed_key]}
+                    params = sig.parameters
+                    param_names = [p for p in params.keys() if p != "self"]
+                    has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+                    # If single argument passed with a generic or mismatched key, remap to first param
+                    if len(final_args) == 1 and param_names:
+                        passed_key = list(final_args.keys())[0]
+                        if passed_key not in param_names and not has_var_keyword:
+                            final_args = {param_names[0]: final_args[passed_key]}
+
+                    # Filter unexpected arguments if function does not take **kwargs
+                    if not has_var_keyword:
+                        final_args = {k: v for k, v in final_args.items() if k in param_names}
                 except Exception:
                     pass
-            result = fn(**step.args) if isinstance(step.args, dict) else fn(step.args)
+
+            # Timeout-protected execution
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(fn, **final_args) if isinstance(final_args, dict) else executor.submit(fn, final_args)
+                result = future.result(timeout=timeout)
+
             return ToolResult(success=True, data=self._format_result(result, tool_name), tool_name=tool_name)
+        except concurrent.futures.TimeoutError:
+            return ToolResult(success=False, error=f"Tool '{tool_name}' timed out after {timeout} seconds.", tool_name=tool_name)
         except ToolExecutionError:
             raise
         except Exception as e:

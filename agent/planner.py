@@ -30,10 +30,8 @@ class Planner:
     def __init__(self, llm_router=None):
         self.llm = llm_router
 
-    async def plan(self, goal: str, context: str = "") -> list[Step]:
-        if not self.llm:
-            return [Step(id="1", description=goal, tool="", args={})]
-        prompt = (
+    def get_prompt(self, goal: str = "task", context: str = "") -> str:
+        return (
             f"Determine if the following is a conversational message or a task needing steps.\n"
             f"User: {goal}\n"
             f"Context: {context}\n\n"
@@ -171,6 +169,11 @@ class Planner:
             "3 | Check unread WhatsApp messages | whatsapp_check_unread | {}\n"
             "4 | Read unread WhatsApp messages | whatsapp_read_unread | {}"
         )
+
+    async def plan(self, goal: str, context: str = "") -> list[Step]:
+        if not self.llm:
+            return [Step(id="1", description=goal, tool="", args={})]
+        prompt = self.get_prompt(goal, context)
         try:
             resp = await self.llm.generate([
                 {"role": "system", "content": PLANNER_SYSTEM_PROMPT},

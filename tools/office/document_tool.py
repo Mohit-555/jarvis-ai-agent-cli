@@ -18,8 +18,11 @@ class DocumentTool:
 
     def _resolve_path(self, path: str) -> Path:
         p = Path(path).expanduser().resolve()
-        if self.workspace and not str(p).startswith(str(self.workspace)):
-            pass
+        if self.workspace:
+            try:
+                p.relative_to(self.workspace)
+            except ValueError:
+                raise PermissionError(f"Access Denied: Document path '{path}' is outside workspace '{self.workspace}'")
         return p
 
     def read(self, file_path: str, max_chars: int = 15000) -> Dict[str, Any]:

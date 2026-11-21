@@ -5,9 +5,10 @@ Supports SQLite, MySQL, and PostgreSQL operations (queries, tables listing, sche
 
 import csv
 import os
+import re
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class DatabaseTool:
@@ -18,10 +19,36 @@ class DatabaseTool:
 
     def _resolve_sqlite_path(self, db_path: str) -> Path:
         p = Path(db_path).expanduser().resolve()
-        if self.workspace and not str(p).startswith(str(self.workspace)):
-            # If not explicitly under workspace, allow relative to cwd
-            pass
+        if self.workspace:
+            try:
+                p.relative_to(self.workspace)
+            except ValueError:
+                raise PermissionError(f"Access Denied: SQLite database path '{db_path}' is outside workspace '{self.workspace}'")
         return p
+
+    @staticmethod
+    def classify_sql(query: str) -> Tuple[str, bool]:
+        """
+        Classify SQL statement into verb and whether it is destructive/mutation.
+        Returns: (verb, is_destructive)
+        """
+        # Strip comments
+        q = re.sub(r"--.*$", "", query, flags=re.MULTILINE)
+        q = re.sub(r"/\*.*?\*/", "", q, flags=re.DOTALL).strip()
+        if not q:
+            return ("EMPTY", False)
+
+        tokens = q.split()
+        verb = tokens[0].upper()
+
+        read_only_verbs = {"SELECT", "SHOW", "EXPLAIN", "DESCRIBE", "PRAGMA"}
+        destructive_verbs = {"INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE", "ALTER", "CREATE", "REPLACE"}
+
+        if verb in read_only_verbs:
+            return (verb, False)
+        if verb in destructive_verbs:
+            return (verb, True)
+        return (verb, True)
 
     def _get_connection(
         self,
@@ -85,11 +112,22 @@ class DatabaseTool:
         user: str = "root",
         password: str = "",
         max_rows: int = 100,
+        confirm: bool = False,
     ) -> Dict[str, Any]:
         """
         Execute an arbitrary SQL query and return results or execution status.
+        Destructive operations (INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE) require confirm=True.
         """
         try:
+            verb, is_destructive = self.classify_sql(query)
+            if is_destructive and not confirm:
+                return {
+                    "success": False,
+                    "requires_confirmation": True,
+                    "verb": verb,
+                    "error": f"Destructive SQL operation '{verb}' requires confirmation before execution.",
+                }
+
             conn, resolved_type = self._get_connection(
                 db_type=db_type,
                 db_name=db_name,
@@ -101,10 +139,7 @@ class DatabaseTool:
             cursor = conn.cursor()
             cursor.execute(query)
 
-            clean_q = query.strip().lower()
-            is_select = clean_q.startswith(("select", "show", "pragma", "describe", "explain"))
-
-            if is_select:
+            if not is_destructive:
                 rows_data = cursor.fetchmany(max_rows)
                 columns = [desc[0] for desc in cursor.description] if cursor.description else []
                 rows = []

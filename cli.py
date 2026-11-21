@@ -1,4 +1,6 @@
 import sys
+import os
+import re
 import asyncio
 import html
 import shutil
@@ -823,25 +825,56 @@ class JarvisCLI:
             _eof = 0
 
             # Natural exit check
-            clean_cmd = re.sub(r"[?!.,;:~_]+", "", user_input.strip().lower())
+            clean_cmd = re.sub(r"[?!.,;:~_`'\"()]+", " ", user_input.strip().lower()).strip()
+            words = clean_cmd.split()
             is_exit_cmd = False
-            if clean_cmd in ("exit", "quit", "q", ":q", "bye", "goodbye", "/exit", "/quit", "/q"):
-                is_exit_cmd = True
-            elif any(clean_cmd.startswith(p) for p in ("exit ", "quit ", "close ", "stop ", "shut down ", "shutdown ")):
-                if any(w in clean_cmd for w in ("jarvis", "session", "sessioyn", "app", "terminal", "program", "this")):
+
+            if not words:
+                continue
+
+            # Question forms should not be treated as exit command (e.g. "how to exit vim?")
+            is_question = any(clean_cmd.startswith(q) for q in (
+                "how ", "what ", "why ", "when ", "where ", "who ", "can you ", "could you ", "tell me "
+            ))
+
+            if not is_question:
+                # Direct single-token exits
+                if clean_cmd in ("exit", "quit", "q", ":q", "bye", "goodbye", "cya", "alvida", "close", "stop", "shutdown"):
                     is_exit_cmd = True
-            elif any(clean_cmd.endswith(p) for p in (" exit", " quit", " close", " band karo", " ko band karo")):
-                if any(w in clean_cmd for w in ("jarvis", "session", "sessioyn")):
-                    is_exit_cmd = True
-            elif any(phrase in clean_cmd for phrase in (
-                "exit session", "exit this session", "exit tbhis sessioyn", "close jarvis", "stop jarvis",
-                "jarvis close", "jarvis exit", "jarvis band karo", "band karo jarvis", "close this session"
-            )):
-                is_exit_cmd = True
+                else:
+                    # Normalize common typos
+                    typo_map = {
+                        "sessioyn": "session", "sesion": "session", "sesson": "session", "sessoin": "session",
+                        "tbhis": "this", "ths": "this", "thiss": "this",
+                        "jarivs": "jarvis", "jarvisai": "jarvis",
+                        "exitt": "exit", "ext": "exit", "exiit": "exit",
+                        "quitt": "quit", "qut": "quit"
+                    }
+                    norm_words = [typo_map.get(w, w) for w in words]
+                    norm_cmd = " ".join(norm_words)
+
+                    target_nouns = {"session", "jarvis", "app", "terminal", "program", "chat", "this", "it", "all", "now", "here"}
+                    exit_verbs = ("exit", "quit", "close", "stop", "end", "terminate", "shut down", "shutdown", "band", "kill")
+
+                    if any(norm_cmd.startswith(f"{v} ") or norm_cmd == v for v in exit_verbs):
+                        if any(w in norm_words for w in target_nouns) or len(norm_words) <= 3:
+                            is_exit_cmd = True
+                    elif any(norm_cmd.endswith(f" {v}") for v in ("exit", "quit", "close", "stop", "end", "band", "band karo", "band kar do", "khatam karo", "alvida")):
+                        is_exit_cmd = True
+                    elif any(p in norm_cmd for p in (
+                        "exit session", "exit this session", "close jarvis", "stop jarvis",
+                        "jarvis close", "jarvis exit", "jarvis band karo", "band karo jarvis",
+                        "close this session", "band kar do", "khatam karo", "chalta hoon"
+                    )):
+                        is_exit_cmd = True
 
             if is_exit_cmd:
                 user_name = self.config.get("user_name", "")
-                bye_msg = f"Goodbye, {user_name}! Jarvis is shutting down." if user_name else "Goodbye! Jarvis is shutting down."
+                user_lang = str(self.config.get("user_language", "English")).lower()
+                if user_lang == "hinglish":
+                    bye_msg = f"Theek hai {user_name}, main Jarvis ko close kar raha hoon. Apna khyal rakhna!" if user_name else "Theek hai, main Jarvis ko close kar raha hoon. Apna khyal rakhna!"
+                else:
+                    bye_msg = f"Goodbye, {user_name}! Jarvis is shutting down." if user_name else "Goodbye! Jarvis is shutting down."
                 console.print(Text(bye_msg, style=P["warn"]))
                 if self.daemon:
                     self.daemon.stop()

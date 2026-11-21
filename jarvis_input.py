@@ -238,7 +238,7 @@ class JarvisInput:
             key_bindings     = _make_bindings(),
             bottom_toolbar   = self._toolbar,
             complete_in_thread = True,
-            mouse_support    = has_completions,  # Only intercept mouse when completion menu is open; keeps native mousepad scrolling everywhere else
+            mouse_support    = has_completions if self.config.get("mouse_support", True) else Condition(lambda: False),
             wrap_lines       = True,
         )
 

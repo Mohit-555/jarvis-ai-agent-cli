@@ -39,11 +39,12 @@ class CodeExecutor:
                     ],
                     capture_output=True, text=True, timeout=timeout,
                 )
-                return {
-                    "stdout": result.stdout.strip(),
-                    "stderr": result.stderr.strip(),
-                    "success": result.returncode == 0,
-                }
+                if result.returncode == 0 or ("docker" not in result.stderr.lower() and "daemon" not in result.stderr.lower()):
+                    return {
+                        "stdout": result.stdout.strip(),
+                        "stderr": result.stderr.strip(),
+                        "success": result.returncode == 0,
+                    }
             except subprocess.TimeoutExpired:
                 return {"stdout": "", "stderr": "Execution timed out", "success": False}
             except Exception:

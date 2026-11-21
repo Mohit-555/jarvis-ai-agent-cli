@@ -75,14 +75,13 @@ class Sandbox:
                 if res.returncode == 0:
                     result["success"] = True
                     result["output"] = res.stdout.strip()
-                else:
-                    result["error"] = res.stderr.strip() or f"Exit code {res.returncode}"
-                return result
+                    return result
+                logger.debug(f"Docker sandbox execution returned {res.returncode}, falling back to local sandbox: {res.stderr.strip()}")
             except subprocess.TimeoutExpired:
                 result["error"] = "Execution timed out"
                 return result
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Docker sandbox unavailable ({e}), falling back to local sandbox")
 
         if HAS_RESTRICTED:
             try:
