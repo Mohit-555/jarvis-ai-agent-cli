@@ -789,23 +789,49 @@ class JarvisCLI:
             yield "Agent not initialized."; return
         self._session.add_message("user", user_input)
         full = ""
+        from ui.question_dialog import QuestionDialog
+        import json
+
         async for chunk in agent.execute_stream(user_input, self._session, config=self.config):
-            if chunk.startswith("[ASK:"):
+            if chunk.startswith("[ASK_STRUCT:"):
+                payload_str = chunk[12:].rstrip("]\n")
+                try:
+                    q_data = json.loads(payload_str)
+                except Exception:
+                    q_data = {"question": payload_str}
+
+                if hasattr(self, "_active_status") and self._active_status:
+                    try: self._active_status.stop()
+                    except Exception: pass
+
+                answer = await QuestionDialog.ask_async(q_data)
+                agent.submit_answer(answer)
+
+                if hasattr(self, "_active_status") and self._active_status:
+                    try: self._active_status.start()
+                    except Exception: pass
+
+            elif chunk.startswith("[ASK:"):
                 question = chunk[5:].rstrip("]\n")
                 if hasattr(self, "_active_status") and self._active_status:
                     try: self._active_status.stop()
                     except Exception: pass
-                answer = await self._ptk_session.prompt_async(HTML(f"<ansicyan><b>? </b></ansicyan>{html.escape(question)} "))
+
+                answer = await QuestionDialog.ask_async(question)
                 agent.submit_answer(answer)
+
                 if hasattr(self, "_active_status") and self._active_status:
                     try: self._active_status.start()
                     except Exception: pass
+
             elif agent._pending_ask:
                 if hasattr(self, "_active_status") and self._active_status:
                     try: self._active_status.stop()
                     except Exception: pass
-                answer = await self._ptk_session.prompt_async(HTML(f"<ansicyan><b>? </b></ansicyan>{html.escape(agent._pending_ask)} "))
+
+                answer = await QuestionDialog.ask_async(agent._pending_ask)
                 agent.submit_answer(answer)
+
                 if hasattr(self, "_active_status") and self._active_status:
                     try: self._active_status.start()
                     except Exception: pass

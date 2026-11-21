@@ -109,7 +109,7 @@ class Planner:
             "- github_close_issue: Close a GitHub issue (args: {\"issue_number\": 1, \"comment\": \"...\"})\n"
             "- github_repo_view: View repository info on GitHub (args optional: {\"repo\": \"owner/repo\"})\n"
             "- github_run: Run arbitrary GitHub CLI command (args: {\"command\": \"...\"})\n"
-            "- ask_user: Ask the user a question (args: {\"question\": \"...\"})\n"
+            "- ask_user: Ask the user an interactive question with selectable options (args: {\"question\": \"...\", \"options\": [\"opt1\", \"opt2\", \"Other\"], \"multiple\": false, \"title\": \"...\"})\n"
             "If no tool is needed, leave TOOL empty.\n"
             "ROUTING RULES:\n"
             "- 'git status/check git/repo status/kya changes hain' → git_status\n"

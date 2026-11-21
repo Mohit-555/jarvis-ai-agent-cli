@@ -27,11 +27,12 @@ class TestInteractiveAsk(unittest.TestCase):
 
                 gen = executor.execute_stream("create website")
                 
-                # First chunk should be the [ASK:...] signal
+                # First chunk should be the [ASK_STRUCT:...] signal
                 chunk = await gen.__anext__()
-                self.assertIn("[ASK:What website?]", chunk)
+                self.assertTrue(chunk.startswith("[ASK_STRUCT:") or chunk.startswith("[ASK:"))
+                self.assertIn("What website?", chunk)
                 self.assertEqual(len(asked_events), 1)
-                self.assertEqual(asked_events[0]["question"], "What website?")
+                self.assertIn("What website?", str(asked_events[0]["question"]))
 
                 # Submit answer to unblock
                 executor.submit_answer("portfolio website")

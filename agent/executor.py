@@ -282,12 +282,38 @@ class AgentExecutor:
                     yield f"\nStep {step.id}: {step.description}\n"
 
                 if step.tool == "ask_user":
-                    question = step.args.get("question", step.description)
-                    self._pending_ask = question
+                    question_text = step.args.get("question", step.description) if isinstance(step.args, dict) else step.description
+                    options = list(step.args.get("options", [])) if isinstance(step.args, dict) else []
+                    multiple = bool(step.args.get("multiple", False)) if isinstance(step.args, dict) else False
+                    title = step.args.get("title", "Jarvis needs your input") if isinstance(step.args, dict) else "Jarvis needs your input"
+
+                    if not options:
+                        q_lower = question_text.lower()
+                        if "website" in q_lower:
+                            options = ["E-commerce", "Portfolio", "Blog", "Business Website", "Student Management System", "Other"]
+                        elif any(w in q_lower for w in ("language", "framework", "tech stack")):
+                            options = ["Python / Django", "FastAPI", "React / Node.js", "Vue.js", "Other"]
+                        elif any(w in q_lower for w in ("database", "db")):
+                            options = ["SQLite", "PostgreSQL", "MySQL", "MongoDB", "Other"]
+                        elif any(w in q_lower for w in ("confirm", "proceed", "yes or no", "approve")):
+                            options = ["Yes, proceed", "No, cancel", "Modify plan"]
+
+                    q_payload = {
+                        "type": "select" if options else "text",
+                        "title": title,
+                        "progress": f"Question {step.id} of {len(steps)}",
+                        "question": question_text,
+                        "options": options,
+                        "multiple": multiple,
+                        "required": True,
+                    }
+
+                    import json
+                    self._pending_ask = q_payload
                     self._ask_event.clear()
-                    event_bus.emit(EVENTS["AGENT_ASK"], question=question, step=step.id, session_id=session_id)
-                    central_logger.agent_logger.info(f"User interaction requested: '{question}'")
-                    yield f"[ASK:{question}]\n"
+                    event_bus.emit(EVENTS["AGENT_ASK"], question=q_payload, step=step.id, session_id=session_id)
+                    central_logger.agent_logger.info(f"User interaction requested: '{question_text}' (options={len(options)})")
+                    yield f"[ASK_STRUCT:{json.dumps(q_payload)}]\n"
                     await self._ask_event.wait()
                     answer = self._ask_response
                     self._pending_ask = None
@@ -302,16 +328,25 @@ class AgentExecutor:
                             results.append(result)
                             continue
                         if self.permission_guard.require_confirm(step.tool):
-                            question = f"Do you want to run '{step.tool}' with arguments {step.args}? (y/n)"
-                            self._pending_ask = question
+                            question = f"Do you want to run '{step.tool}' with arguments {step.args}?"
+                            q_payload = {
+                                "type": "select",
+                                "title": "Tool Execution Confirmation",
+                                "question": question,
+                                "options": ["Yes, allow execution", "No, deny"],
+                                "multiple": False,
+                                "required": True,
+                            }
+                            import json
+                            self._pending_ask = q_payload
                             self._ask_event.clear()
-                            event_bus.emit(EVENTS["AGENT_ASK"], question=question, step=step.id, session_id=session_id)
-                            yield f"[ASK:{question}]\n"
+                            event_bus.emit(EVENTS["AGENT_ASK"], question=q_payload, step=step.id, session_id=session_id)
+                            yield f"[ASK_STRUCT:{json.dumps(q_payload)}]\n"
                             await self._ask_event.wait()
                             answer = (self._ask_response or "").strip().lower()
                             self._pending_ask = None
                             self._ask_response = None
-                            if answer not in ("y", "yes"):
+                            if not any(yes in answer for yes in ("y", "yes", "allow")):
                                 result = ToolResult(success=False, error="Tool execution denied by user.", tool_name=step.tool)
                                 step.status = "failed"
                                 yield f"Execution denied by user.\n"
