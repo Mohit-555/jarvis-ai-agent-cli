@@ -222,6 +222,14 @@ class JarvisInput:
         self.history  = history or InMemoryHistory()
         self._turns   = 0
 
+        # Ensure terminal mouse tracking is explicitly reset on startup so touchpad scrolls cleanly
+        try:
+            import sys
+            sys.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l")
+            sys.stdout.flush()
+        except Exception:
+            pass
+
         self._session = PromptSession(
             history          = self.history,
             completer        = SlashCompleter(),
@@ -277,6 +285,13 @@ class JarvisInput:
             return result or ""
         except (EOFError, KeyboardInterrupt):
             return ""
+        finally:
+            try:
+                import sys
+                sys.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l")
+                sys.stdout.flush()
+            except Exception:
+                pass
 
     def ask_sync(self) -> str:
         """Synchronous wrapper — use only outside an async loop."""

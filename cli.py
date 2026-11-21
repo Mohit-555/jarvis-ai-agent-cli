@@ -219,10 +219,18 @@ class JarvisCLI:
         verb = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        if verb == "/exit":
-            console.print(Text("Goodbye!", style=P["warn"]))
+        if verb in ("/exit", "/quit", "/q"):
+            user_name = self.config.get("user_name", "")
+            msg = f"Goodbye, {user_name}! Jarvis is shutting down." if user_name else "Goodbye! Jarvis is shutting down."
+            console.print(Text(msg, style=P["warn"]))
             if self.daemon:
                 self.daemon.stop()
+            try:
+                import sys
+                sys.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l")
+                sys.stdout.flush()
+            except Exception:
+                pass
             sys.exit(0)
 
         elif verb == "/reset":
@@ -813,6 +821,37 @@ class JarvisCLI:
                 if _eof >= 3: break
                 continue
             _eof = 0
+
+            # Natural exit check
+            clean_cmd = re.sub(r"[?!.,;:~_]+", "", user_input.strip().lower())
+            is_exit_cmd = False
+            if clean_cmd in ("exit", "quit", "q", ":q", "bye", "goodbye", "/exit", "/quit", "/q"):
+                is_exit_cmd = True
+            elif any(clean_cmd.startswith(p) for p in ("exit ", "quit ", "close ", "stop ", "shut down ", "shutdown ")):
+                if any(w in clean_cmd for w in ("jarvis", "session", "sessioyn", "app", "terminal", "program", "this")):
+                    is_exit_cmd = True
+            elif any(clean_cmd.endswith(p) for p in (" exit", " quit", " close", " band karo", " ko band karo")):
+                if any(w in clean_cmd for w in ("jarvis", "session", "sessioyn")):
+                    is_exit_cmd = True
+            elif any(phrase in clean_cmd for phrase in (
+                "exit session", "exit this session", "exit tbhis sessioyn", "close jarvis", "stop jarvis",
+                "jarvis close", "jarvis exit", "jarvis band karo", "band karo jarvis", "close this session"
+            )):
+                is_exit_cmd = True
+
+            if is_exit_cmd:
+                user_name = self.config.get("user_name", "")
+                bye_msg = f"Goodbye, {user_name}! Jarvis is shutting down." if user_name else "Goodbye! Jarvis is shutting down."
+                console.print(Text(bye_msg, style=P["warn"]))
+                if self.daemon:
+                    self.daemon.stop()
+                try:
+                    import sys
+                    sys.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l")
+                    sys.stdout.flush()
+                except Exception:
+                    pass
+                sys.exit(0)
 
             if user_input.startswith("/"):
                 result = self.handle_slash(user_input)
