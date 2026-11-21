@@ -1,5 +1,8 @@
+import os
+import re
 import subprocess
 import shutil
+from typing import Optional
 try:
     import psutil
 except ImportError:
@@ -106,11 +109,87 @@ class SystemTool:
             f"Make sure the app is installed (e.g. 'sudo apt install brave-browser')."
         )
 
-    def browse_url(self, url: str) -> str:
-        """Open any URL in the best available browser."""
+    def _get_session_env(self) -> dict:
+        """Ensure GUI, DBus, and session variables are populated for desktop IPC."""
+        env = dict(os.environ)
+        uid = os.getuid()
+
+        if not env.get("XDG_RUNTIME_DIR"):
+            env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
+
+        if not env.get("DBUS_SESSION_BUS_ADDRESS"):
+            env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path=/run/user/{uid}/bus"
+
+        if not env.get("DISPLAY"):
+            env["DISPLAY"] = ":0"
+
+        if not env.get("XDG_CURRENT_DESKTOP"):
+            env["XDG_CURRENT_DESKTOP"] = "GNOME"
+
+        return env
+
+    def _focus_browser_window(self):
+        """Bring the active browser window to the foreground."""
+        env = self._get_session_env()
+        if shutil.which("wmctrl"):
+            try:
+                for target in ("Brave-browser", "brave", "Google-chrome", "chrome"):
+                    res = subprocess.run(["wmctrl", "-xa", target], capture_output=True, timeout=2, env=env)
+                    if res.returncode == 0:
+                        return
+                subprocess.run(["wmctrl", "-a", "Brave"], capture_output=True, timeout=2, env=env)
+            except Exception:
+                pass
+
+    def browse_url(self, url: str, target_domain: Optional[str] = None) -> str:
+        """Open any URL in the existing browser window/tab if possible, or best available browser."""
         url = url.strip()
         if not url.startswith("http://") and not url.startswith("https://"):
             url = "https://" + url
+
+        # Strategy 1: CDP (Remote Debugging port 9222) to reuse existing window and tabs
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            cdp_open = (sock.connect_ex(('127.0.0.1', 9222)) == 0)
+            sock.close()
+            if cdp_open:
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    browser = p.chromium.connect_over_cdp("http://127.0.0.1:9222")
+                    if browser.contexts:
+                        ctx = browser.contexts[0]
+                        matched_page = None
+                        if target_domain:
+                            for pg in ctx.pages:
+                                if target_domain.lower() in pg.url.lower():
+                                    matched_page = pg
+                                    break
+                        if matched_page:
+                            matched_page.bring_to_front()
+                            matched_page.goto(url)
+                            self._focus_browser_window()
+                            return f"Navigated existing {target_domain} tab to: {url}"
+                        else:
+                            new_page = ctx.new_page()
+                            new_page.goto(url)
+                            self._focus_browser_window()
+                            return f"Opened tab in current browser window: {url}"
+        except Exception:
+            pass
+
+        # Strategy 2: gio open uses DBus portal, reliably reusing the existing browser window
+        env = self._get_session_env()
+        if shutil.which("gio"):
+            try:
+                subprocess.Popen(["gio", "open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+                self._focus_browser_window()
+                return f"Opened in current browser session: {url}"
+            except Exception:
+                pass
+
+        # Strategy 3: Direct browser binary with full session environment
         BROWSERS = ["brave-browser", "brave", "google-chrome", "google-chrome-stable",
                     "chromium-browser", "chromium", "firefox", "xdg-open"]
         for browser in BROWSERS:
@@ -118,7 +197,9 @@ class SystemTool:
                 try:
                     subprocess.Popen([browser, url],
                                      stdout=subprocess.DEVNULL,
-                                     stderr=subprocess.DEVNULL)
+                                     stderr=subprocess.DEVNULL,
+                                     env=env)
+                    self._focus_browser_window()
                     return f"Opened in {browser}: {url}"
                 except Exception as e:
                     return f"Found '{browser}' but failed to open URL: {e}"
@@ -129,6 +210,23 @@ class SystemTool:
         import urllib.parse
         url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
         return self.browse_url(url)
+
+    def play_youtube(self, query: str) -> str:
+        """Search and play a song/video directly on YouTube in the current browser window."""
+        import urllib.parse
+        clean_q = query.strip()
+        for prefix in ("play ", "song ", "gana ", "chalao "):
+            if clean_q.lower().startswith(prefix):
+                clean_q = clean_q[len(prefix):].strip()
+        for suffix in (" chalao", " play", " chala do", " laga do", " song", " gana"):
+            if clean_q.lower().endswith(suffix):
+                clean_q = clean_q[:-len(suffix)].strip()
+        if not clean_q:
+            clean_q = query.strip()
+
+        encoded = urllib.parse.quote(clean_q)
+        url = f"https://www.youtube.com/results?search_query={encoded}"
+        return self.browse_url(url, target_domain="youtube.com")
 
     def screenshot(self):
         img_path = "/tmp/jarvis_screenshot.png"

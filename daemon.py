@@ -146,6 +146,16 @@ class Daemon:
                 },
             })
             tool_defs.append({
+                'name': 'play_youtube',
+                'description': 'Search and play a song, video, or music directly on YouTube in the current browser window. Use for "gana chalao", "play song X", "Tum Hi Ho chalao", etc.',
+                'handler': functools.partial(SystemTool.play_youtube, _inst),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {'query': {'type': 'string', 'description': 'Song or video title to play on YouTube'}},
+                    'required': ['query'],
+                },
+            })
+            tool_defs.append({
                 'name': 'screenshot',
                 'description': 'Take a screenshot of the current screen',
                 'handler': functools.partial(SystemTool.screenshot, _inst),

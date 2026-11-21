@@ -117,6 +117,9 @@ tools:
   media_control:
     description: Control active media playback
     level: auto
+  play_youtube:
+    description: Search and play song or video directly on YouTube in current window
+    level: auto
   db_query:
     description: Execute database SQL queries
     level: auto
