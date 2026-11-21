@@ -89,9 +89,12 @@ def _render_tool_call(name: str, arg: str = "", result: str = "") -> Text:
     return t
 
 
-def _user_line(text: str) -> Text:
+def _user_line(text: str, user_name: str = "") -> Text:
     t = Text()
-    t.append("YOU ", style="bold #25C5DD")
+    if not user_name:
+        user_name = cfg.get("user_name", "")
+    first_name = user_name.strip().split()[0] if user_name else "YOU"
+    t.append(f"{first_name} ", style="bold #25C5DD")
     t.append("› ", style="dim")
     t.append(text, style="white")
     return t
@@ -266,6 +269,9 @@ class JarvisCLI:
                 self._print_inline("Usage: /name <your_name>", style=P["warn"])
             else:
                 self.config["user_name"] = arg
+                cfg["user_name"] = arg
+                if hasattr(self, "_input") and hasattr(self._input, "config"):
+                    self._input.config["user_name"] = arg
                 save_config(self.config)
                 if self.daemon:
                     self.daemon.config["user_name"] = arg
@@ -933,6 +939,11 @@ class JarvisCLI:
         # 3. Save configuration
         self.config["user_name"] = name
         self.config["user_language"] = language
+        cfg["user_name"] = name
+        cfg["user_language"] = language
+        if hasattr(self, "_input") and hasattr(self._input, "config"):
+            self._input.config["user_name"] = name
+            self._input.config["user_language"] = language
         save_config(self.config)
 
         if self.daemon:

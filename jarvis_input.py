@@ -177,7 +177,7 @@ def _make_toolbar(provider: str, model: str, turns: int):
 
 # ── Prompt string (left-bar accent like OpenCode) ─────────────────────────────
 
-def _prompt_str() -> AnyFormattedText:
+def _prompt_str(user_name: str = "") -> AnyFormattedText:
     def _on_prompt_click(mouse_event: MouseEvent):
         if mouse_event.event_type == MouseEventType.MOUSE_UP:
             try:
@@ -188,7 +188,8 @@ def _prompt_str() -> AnyFormattedText:
             except Exception:
                 pass
 
-    return FormattedText([("class:prompt", "YOU ›  ", _on_prompt_click)])
+    first_name = user_name.strip().split()[0] if user_name else "YOU"
+    return FormattedText([("class:prompt", f"{first_name} ›  ", _on_prompt_click)])
 
 # ── Key bindings ──────────────────────────────────────────────────────────────
 
@@ -287,7 +288,8 @@ class JarvisInput:
         Returns "" on Ctrl+C / Ctrl+D.
         """
         try:
-            result = await self._session.prompt_async(_prompt_str())
+            user_name = self.config.get("user_name", "")
+            result = await self._session.prompt_async(_prompt_str(user_name))
             return result or ""
         except (EOFError, KeyboardInterrupt):
             return ""
