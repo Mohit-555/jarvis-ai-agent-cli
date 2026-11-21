@@ -63,6 +63,37 @@ class TestMediaTool(unittest.TestCase):
 
     @patch("shutil.which")
     @patch("subprocess.run")
+    def test_mpris_prioritizes_playing_over_paused(self, mock_run, mock_which):
+        # Two players: Player 1 is Paused (Old track), Player 2 is Playing (Active song)
+        mock_which.side_effect = lambda cmd: "/usr/bin/gdbus" if cmd == "gdbus" else None
+
+        def run_side_effect(cmd, **kwargs):
+            res = MagicMock()
+            res.returncode = 0
+            if "ListNames" in cmd[-1]:
+                res.stdout = "(['org.mpris.MediaPlayer2.brave.instance1', 'org.mpris.MediaPlayer2.brave.instance2'],)"
+            elif "PlaybackStatus" in cmd[-1]:
+                if "instance1" in cmd:
+                    res.stdout = "(<'Paused'>,)"
+                else:
+                    res.stdout = "(<'Playing'>,)"
+            elif "Metadata" in cmd[-1]:
+                if "instance1" in cmd:
+                    res.stdout = "({'xesam:title': <'Old Paused Song'>, 'xesam:artist': <['Old Artist']>},)"
+                else:
+                    res.stdout = "({'xesam:title': <'Hum Unse Mohabbat Karke'>, 'xesam:artist': <['Kumar Sanu']>},)"
+            return res
+
+        mock_run.side_effect = run_side_effect
+
+        media = self.tool._query_mpris_dbus()
+        self.assertIsNotNone(media)
+        self.assertEqual(media["title"], "Hum Unse Mohabbat Karke")
+        self.assertEqual(media["artist"], "Kumar Sanu")
+        self.assertEqual(media["status"], "Playing")
+
+    @patch("shutil.which")
+    @patch("subprocess.run")
     def test_window_title_youtube_fallback(self, mock_run, mock_which):
         # Mock playerctl and gdbus not returning, but wmctrl available
         mock_which.side_effect = lambda cmd: "/usr/bin/wmctrl" if cmd == "wmctrl" else None

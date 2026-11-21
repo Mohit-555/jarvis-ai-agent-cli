@@ -123,7 +123,10 @@ class MediaTool:
             if filtered:
                 player_names = filtered
 
-        # 2. Inspect players for status and metadata
+        # 2. Inspect players for status and metadata (prioritizing actively Playing tracks)
+        playing_candidates = []
+        other_candidates = []
+
         for p_dest in player_names:
             try:
                 # Get PlaybackStatus
@@ -174,15 +177,24 @@ class MediaTool:
                             clean_player = "Brave / YouTube"
 
                         if title:
-                            return {
+                            cand = {
                                 "title": title,
                                 "artist": artist,
                                 "status": status,
                                 "player": clean_player,
                                 "raw_dest": p_dest,
                             }
+                            if status.lower() == "playing":
+                                playing_candidates.append(cand)
+                            else:
+                                other_candidates.append(cand)
             except Exception:
                 continue
+
+        if playing_candidates:
+            return playing_candidates[0]
+        if other_candidates:
+            return other_candidates[0]
 
         return None
 
@@ -224,6 +236,9 @@ class MediaTool:
                 # Strip browser suffix
                 cleaned = re.sub(r"\s*-\s*(Google Chrome|Brave|Chromium|Mozilla Firefox)$", "", t, flags=re.IGNORECASE)
                 song_title = cleaned.replace(" - YouTube", "").strip()
+                # Clean leading playback symbols or notification badges like '▶ (171) ' or '🔊 '
+                song_title = re.sub(r"^[▶🔊⏸\s]+", "", song_title)
+                song_title = re.sub(r"^\(\d+\)\s*", "", song_title).strip()
                 if song_title and song_title.lower() != "youtube":
                     return {
                         "title": song_title,
