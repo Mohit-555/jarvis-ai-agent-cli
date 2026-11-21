@@ -182,7 +182,73 @@ class Planner:
             "4 | Read unread WhatsApp messages | whatsapp_read_unread | {}"
         )
 
+    def _detect_music_intent(self, goal: str, context: str = "") -> Optional[str]:
+        """Detect deterministic music playback intent and return the clean song query."""
+        import re
+        g = goal.strip()
+        g_lower = g.lower()
+        g_clean = re.sub(r"[?!.,;:~_`'\"()]+", " ", g_lower).strip()
+
+        # 1. Do not intercept status/inspection questions
+        is_querying_current = any(q in g_clean for q in ("kaun sa", "what song", "kya chal", "sun rha", "sun raha", "listening"))
+        if is_querying_current:
+            return None
+
+        # 2. Check for retry phrases ("ynhi chala", "nahi chala", "chala nahi", "play nahi hua")
+        retry_phrases = ("ynhi chala", "nahi chala", "nhi chala", "chala nahi", "chala nhi", "play nahi hua", "play nhi hua", "song nahi chala", "gana nahi chala", "nahi baja")
+        if any(rp in g_clean for rp in retry_phrases):
+            if context:
+                quoted = re.findall(r"[\"']([^\"'\n]+)[\"']", context)
+                if quoted:
+                    return quoted[0].strip() if "Tum Hi Ho" in quoted else quoted[-1].strip()
+                m_prev = re.search(r"(?:maine|play|song|chalao)\s+([A-Za-z0-9\s]+?)(?:\s+play|\s+chala|\s+song|\.|\n|$)", context, re.IGNORECASE)
+                if m_prev:
+                    return m_prev.group(1).strip()
+
+        # 3. Check for numeric reference follow-up: e.g. "1 song chalao", "number 1 play karo", "pehla gana chalao"
+        m_num = re.search(r"\b([1-9])\b", g_clean)
+        is_play_word = any(w in g_clean for w in ("play", "chalao", "chala", "laga", "sunao", "bajao"))
+        if m_num and is_play_word and context:
+            num = m_num.group(1)
+            m_song = re.search(rf"{num}[\.\s\:\-\)]+[\"\'\“\‘]?([^\"\'\”\’\n\(\–\-]+)", context)
+            if m_song:
+                cand = m_song.group(1).strip()
+                if len(cand) > 2:
+                    return cand
+
+        # 4. Direct song playback triggers:
+        triggers = ("play", "chalao", "chala do", "laga do", "laga dena", "bajao", "sunao")
+        has_trigger = any(tr in g_clean for tr in triggers)
+
+        if has_trigger:
+            clean = g
+            boilerplate = [
+                r"\b(can you|kya tum|kya aap|please|pls|jarvis)\b",
+                r"\b(isko|ise|is|yeh|ye|woh|wo)\b",
+                r"\b(play karo|play kar do|play|chalao|chala do|chala dena|laga do|laga dena|bajao|sunao)\b",
+                r"\b(on youtube|youtube per|youtube pe|youtube par|browser me|browser pe)\b",
+                r"\b(song|gana|gaana|music|video)\b",
+            ]
+            for pattern in boilerplate:
+                clean = re.sub(pattern, "", clean, flags=re.IGNORECASE)
+            clean = re.sub(r"\s+", " ", clean).strip()
+            if len(clean) >= 2:
+                return clean
+
+        return None
+
     async def plan(self, goal: str, context: str = "") -> list[Step]:
+        # Fast-path: Detect direct music playback requests deterministically
+        detected_song = self._detect_music_intent(goal, context)
+        if detected_song:
+            central_logger.agent_logger.info(f"Planner fast-path: Direct play_youtube for '{detected_song}'")
+            return [Step(
+                id="1",
+                description=f"Play {detected_song} on YouTube",
+                tool="play_youtube",
+                args={"query": detected_song}
+            )]
+
         if not self.llm:
             return [Step(id="1", description=goal, tool="", args={})]
         start_t = time.time()

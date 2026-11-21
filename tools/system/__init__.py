@@ -123,6 +123,9 @@ class SystemTool:
         if not env.get("DISPLAY"):
             env["DISPLAY"] = ":0"
 
+        if not env.get("WAYLAND_DISPLAY"):
+            env["WAYLAND_DISPLAY"] = "wayland-0"
+
         if not env.get("XDG_CURRENT_DESKTOP"):
             env["XDG_CURRENT_DESKTOP"] = "GNOME"
 
@@ -211,9 +214,32 @@ class SystemTool:
         url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
         return self.browse_url(url)
 
+    def _get_youtube_watch_url(self, query: str) -> str:
+        """Fetch the top video ID for `query` to get a direct autoplaying watch URL."""
+        import urllib.request
+        import urllib.parse
+        encoded = urllib.parse.quote(query)
+        search_url = f"https://www.youtube.com/results?search_query={encoded}"
+
+        try:
+            req = urllib.request.Request(
+                search_url,
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+                ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+                if not ids:
+                    ids = re.findall(r'/watch\?v=([a-zA-Z0-9_-]{11})', html)
+                if ids:
+                    return f"https://www.youtube.com/watch?v={ids[0]}&autoplay=1"
+        except Exception:
+            pass
+
+        return search_url
+
     def play_youtube(self, query: str) -> str:
         """Search and play a song/video directly on YouTube in the current browser window."""
-        import urllib.parse
         clean_q = query.strip()
         for prefix in ("play ", "song ", "gana ", "chalao "):
             if clean_q.lower().startswith(prefix):
@@ -224,8 +250,7 @@ class SystemTool:
         if not clean_q:
             clean_q = query.strip()
 
-        encoded = urllib.parse.quote(clean_q)
-        url = f"https://www.youtube.com/results?search_query={encoded}"
+        url = self._get_youtube_watch_url(clean_q)
         return self.browse_url(url, target_domain="youtube.com")
 
     def screenshot(self):

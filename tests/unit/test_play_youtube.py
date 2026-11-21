@@ -11,25 +11,28 @@ class TestPlayYouTube(unittest.TestCase):
         self.tool = SystemTool()
         self.planner = Planner({"llm_provider": "gemini"})
 
+    @patch.object(SystemTool, "_get_youtube_watch_url")
     @patch.object(SystemTool, "browse_url")
-    def test_play_youtube_query_cleaning_and_url_formatting(self, mock_browse):
+    def test_play_youtube_query_cleaning_and_url_formatting(self, mock_browse, mock_watch):
+        mock_watch.side_effect = lambda q: f"https://www.youtube.com/watch?v=TESTID&autoplay=1"
         mock_browse.return_value = "Navigated"
 
         # Case 1: Plain song name
         self.tool.play_youtube("Tum Hi Ho")
-        mock_browse.assert_called_with("https://www.youtube.com/results?search_query=Tum%20Hi%20Ho", target_domain="youtube.com")
+        mock_watch.assert_called_with("Tum Hi Ho")
+        mock_browse.assert_called_with("https://www.youtube.com/watch?v=TESTID&autoplay=1", target_domain="youtube.com")
 
         # Case 2: Hindi command "Tum Hi Ho isko chalao"
         self.tool.play_youtube("Tum Hi Ho isko chalao")
-        mock_browse.assert_called_with("https://www.youtube.com/results?search_query=Tum%20Hi%20Ho%20isko", target_domain="youtube.com")
+        mock_watch.assert_called_with("Tum Hi Ho isko")
 
         # Case 3: "play Kesariya song"
         self.tool.play_youtube("play Kesariya song")
-        mock_browse.assert_called_with("https://www.youtube.com/results?search_query=Kesariya", target_domain="youtube.com")
+        mock_watch.assert_called_with("Kesariya")
 
         # Case 4: "gana chalao Raabta"
         self.tool.play_youtube("gana chalao Raabta")
-        mock_browse.assert_called_with("https://www.youtube.com/results?search_query=Raabta", target_domain="youtube.com")
+        mock_watch.assert_called_with("Raabta")
 
     @patch("shutil.which")
     @patch("subprocess.Popen")
@@ -58,6 +61,31 @@ class TestPlayYouTube(unittest.TestCase):
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].tool, "play_youtube")
         self.assertEqual(steps[0].args.get("query"), "Tum Hi Ho")
+
+    def test_planner_fastpath_music_intent(self):
+        import asyncio
+        context = '''JARVIS:
+1 "Tum Hi Ho" - Aashiqui 2
+2 "Raataan Lambiyan" - Shershaah
+3 "Channa Mereya" - Ae Dil'''
+
+        # Fast path 1: "Tum Hi Ho isko play karo"
+        steps = asyncio.run(self.planner.plan("Tum Hi Ho isko play karo", context))
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].tool, "play_youtube")
+        self.assertEqual(steps[0].args.get("query"), "Tum Hi Ho")
+
+        # Fast path 2: "ynhi chala" (retry resolves previous song)
+        steps_retry = asyncio.run(self.planner.plan("ynhi chala", context))
+        self.assertEqual(len(steps_retry), 1)
+        self.assertEqual(steps_retry[0].tool, "play_youtube")
+        self.assertEqual(steps_retry[0].args.get("query"), "Tum Hi Ho")
+
+        # Fast path 3: "1 song chalao"
+        steps_num = asyncio.run(self.planner.plan("1 song chalao", context))
+        self.assertEqual(len(steps_num), 1)
+        self.assertEqual(steps_num[0].tool, "play_youtube")
+        self.assertEqual(steps_num[0].args.get("query"), "Tum Hi Ho")
 
 
 if __name__ == "__main__":
