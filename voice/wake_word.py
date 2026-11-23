@@ -138,10 +138,9 @@ class WakeWordListener:
             return False
         clean = re.sub(r"[?!.,;:~_`'\"()]+", " ", text.lower()).strip()
         wake_patterns = [
-            r"\b(hello|hey|ok|hi|sun|suno|arre|haan|play)?\s*jarvis\b",
-            r"\bjarvis\b",
-            r"\bजार्विस\b",
-            r"\bजारविस\b",
+            r"\b(hello|hey|ok|hi|sun|suno|arre|haan|play|yo)?\s*(jarvis|jervis|jarvus|service)\b",
+            r"\b(jarvis|jervis|jarvus)\b",
+            r"जार्विस|जारविस|हलो|हेलो",
         ]
         return any(re.search(pat, clean) for pat in wake_patterns)
 
@@ -175,7 +174,20 @@ class WakeWordListener:
             except Exception:
                 pass
 
-        # 3. If no existing window was focused, launch a new terminal running Jarvis
+        # 3. GNOME Shell DBus window activate fallback (Wayland native)
+        if not focused and shutil.which("gdbus"):
+            try:
+                eval_js = 'global.display.get_tab_list().forEach(w => { if (w.get_title().toLowerCase().includes("jarvis")) w.activate(global.get_current_time()); })'
+                subprocess.run(
+                    ["gdbus", "call", "--session", "--dest", "org.gnome.Shell",
+                     "--object-path", "/org/gnome/Shell",
+                     "--method", "org.gnome.Shell.Eval", eval_js],
+                    capture_output=True, timeout=2, env=env
+                )
+            except Exception:
+                pass
+
+        # 4. If no existing window was focused, launch a new terminal running Jarvis
         if not focused:
             pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             python_bin = os.path.join(pkg_root, "venv", "bin", "python")
@@ -207,23 +219,45 @@ class WakeWordListener:
                     stderr=subprocess.DEVNULL
                 )
 
-        # 4. Spoken greeting
+        # 5. Spoken greeting
         self.speak_greeting(f"Hello {first_name}, I am listening")
 
     def speak_greeting(self, message: str):
         """Speak brief confirmation in background thread."""
         def _speak():
+            # 1. Native Speech Dispatcher (most reliable on Ubuntu Linux)
+            if shutil.which("spd-say"):
+                try:
+                    subprocess.run(["spd-say", "-y", "en", message], timeout=4)
+                    return
+                except Exception:
+                    pass
+
+            # 2. pyttsx3 fallback
             try:
                 import pyttsx3
                 engine = pyttsx3.init()
                 engine.say(message)
                 engine.runAndWait()
+                return
             except Exception:
-                if shutil.which("espeak"):
-                    try:
-                        subprocess.run(["espeak", message], timeout=3)
-                    except Exception:
-                        pass
+                pass
+
+            # 3. espeak fallback
+            if shutil.which("espeak"):
+                try:
+                    subprocess.run(["espeak", message], timeout=3)
+                    return
+                except Exception:
+                    pass
+
+            # 4. Terminal bell beep
+            try:
+                sys.stdout.write("\a")
+                sys.stdout.flush()
+            except Exception:
+                pass
+
         t = threading.Thread(target=_speak, daemon=True)
         t.start()
 
@@ -256,6 +290,7 @@ class WakeWordListener:
             speech_buffer = []
             is_speech_active = False
             silent_count = 0
+            calibration_chunks = []
 
             while self._running and self._proc and self._proc.poll() is None:
                 raw = self._proc.stdout.read(chunk_bytes)
@@ -266,6 +301,14 @@ class WakeWordListener:
                 # Convert to numpy int16 array
                 samples = np.frombuffer(raw, dtype=np.int16)
                 rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+
+                # Dynamic calibration during first 1.5s
+                if len(calibration_chunks) < 3:
+                    calibration_chunks.append(rms)
+                    if len(calibration_chunks) == 3:
+                        avg_ambient = float(np.mean(calibration_chunks))
+                        calibrated_thresh = max(200.0, min(1200.0, avg_ambient * 2.2))
+                        self.energy_threshold = calibrated_thresh
 
                 if rms >= self.energy_threshold:
                     is_speech_active = True
@@ -282,8 +325,8 @@ class WakeWordListener:
                         is_speech_active = False
                         silent_count = 0
 
-                        # Process buffer for wake word
-                        self._process_audio_chunk(full_audio)
+                        # Asynchronous non-blocking transcription
+                        self._async_process_audio(full_audio)
 
             if self._proc:
                 try:
@@ -294,6 +337,20 @@ class WakeWordListener:
 
             if self._running:
                 time.sleep(1.0)
+
+    def _async_process_audio(self, audio_data: np.ndarray):
+        """Transcribe speech in background worker thread so audio capture stream is never paused."""
+        if getattr(self, "_is_processing", False):
+            return
+        self._is_processing = True
+
+        def _worker():
+            try:
+                self._process_audio_chunk(audio_data)
+            finally:
+                self._is_processing = False
+
+        threading.Thread(target=_worker, daemon=True, name="WakeWordWorker").start()
 
     def _process_audio_chunk(self, audio_data: np.ndarray):
         """Transcribe speech buffer and trigger on wake word match."""
@@ -322,7 +379,7 @@ class WakeWordListener:
             result = model.transcribe(wav_path, fp16=False, language=None)
             text = result.get("text", "").strip()
 
-            if self.is_wake_phrase(text):
+            if text and self.is_wake_phrase(text):
                 self.trigger_wake()
         except Exception:
             pass
@@ -339,6 +396,8 @@ class WakeWordListener:
             if self._running:
                 return
             self._running = True
+            # Preload Whisper model asynchronously in background
+            threading.Thread(target=self._load_whisper_model, daemon=True, name="WhisperPreload").start()
             self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="JarvisWakeWordListener")
             self._thread.start()
 

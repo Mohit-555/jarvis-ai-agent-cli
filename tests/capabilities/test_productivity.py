@@ -22,8 +22,10 @@ class TestProductivityCapabilities(unittest.TestCase):
 
     def test_task_162_reminder_manager(self):
         """Task 162: Reminder creation in local store."""
+        from datetime import datetime, timedelta
+        future_str = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S")
         msg = self.reminders.set_reminder(
-            time_str="2026-11-22 10:00:00",
+            time_str=future_str,
             message="Buy groceries",
         )
         self.assertTrue(msg.startswith("rem_"))

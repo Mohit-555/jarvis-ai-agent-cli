@@ -478,17 +478,36 @@ class JarvisCLI:
             if sub in ("on", "start", "enable"):
                 self.config["enable_wake_word"] = True
                 save_config(self.config)
+
+                def _on_wake_in_cli():
+                    user_name = self.config.get("user_name", "Mohit")
+                    self._print_inline(
+                        f"\n🎙️ [bold cyan]Jarvis:[/bold cyan] [bold green]Hello {user_name}, I am listening! How can I help you?[/bold green]",
+                        style=P["success"]
+                    )
+                    try:
+                        import sys
+                        sys.stdout.write("\a")
+                        sys.stdout.flush()
+                    except Exception:
+                        pass
+
                 if not hasattr(self, "_wake_listener") or self._wake_listener is None:
                     try:
                         from voice.wake_word import WakeWordListener
-                        self._wake_listener = WakeWordListener(config=self.config)
+                        self._wake_listener = WakeWordListener(
+                            config=self.config,
+                            on_wake_callback=_on_wake_in_cli
+                        )
                         self._wake_listener.start()
                     except Exception as e:
                         self._print_inline(f"Could not start wake word listener: {e}", style=P["error"])
                         return None
-                elif not self._wake_listener.is_alive():
-                    self._wake_listener.start()
-                self._print_inline("🎙️ Wake word active! Say 'Hello Jarvis' to focus or open terminal.", style=P["success"])
+                else:
+                    self._wake_listener.on_wake_callback = _on_wake_in_cli
+                    if not self._wake_listener.is_alive():
+                        self._wake_listener.start()
+                self._print_inline("🎙️ Wake word active! Say 'Hello Jarvis' to focus or speak.", style=P["success"])
 
             elif sub in ("off", "stop", "disable"):
                 self.config["enable_wake_word"] = False
